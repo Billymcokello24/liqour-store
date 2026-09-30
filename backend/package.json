@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3001",
     "build": "next build",
-    "start": "next start -p 3001",
+    "start": "next start -p ${PORT:-3001}",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
     "db:seed": "docker compose exec -T postgres psql -U henrys -d henrys_liquor_hub -f /seed/001_development_catalogue.sql",
