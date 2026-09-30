@@ -3258,6 +3258,79 @@ function EditorialPage({
   )
 }
 
+function DynamicCmsPage() {
+  const { slug } = useParams<{ slug: string }>()
+  const [page, setPage] = useState<
+    { title: string; body: CmsPageBody } | null | undefined
+  >(undefined)
+  useEffect(() => {
+    if (!slug) {
+      setPage(null)
+      return
+    }
+    let active = true
+    fetch(`/api/cms/pages?slug=${encodeURIComponent(slug)}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) =>
+        active &&
+        setPage(
+          data?.page
+            ? {
+                title: data.page.title as string,
+                body: (data.page.body ?? {}) as CmsPageBody,
+              }
+            : null,
+        ),
+      )
+      .catch(() => active && setPage(null))
+    return () => {
+      active = false
+    }
+  }, [slug])
+  if (page === undefined) {
+    return (
+      <div className="page-wrap simple-page">
+        <p className="empty-copy">Loading…</p>
+      </div>
+    )
+  }
+  if (page === null) {
+    return (
+      <SimplePage
+        title="This page is being stocked"
+        body="The page you are looking for is not available yet. Our main shop is open and ready."
+      />
+    )
+  }
+  return (
+    <div className="editorial-page">
+      <section>
+        {page.body.eyebrow && (
+          <span className="eyebrow">{page.body.eyebrow}</span>
+        )}
+        <h1>{page.title}</h1>
+        {page.body.copy && <p>{page.body.copy}</p>}
+        {page.body.sections?.map((section, index) => (
+          <div className="editorial-section" key={index}>
+            {section.heading && <h2>{section.heading}</h2>}
+            {section.body && <p>{section.body}</p>}
+          </div>
+        ))}
+      </section>
+      <aside>
+        <span>Henry's Liquor Hub</span>
+        <p>
+          Responsible retailing, expert recommendations and delivery you can
+          rely on.
+        </p>
+        <Link to="/contact" className="inline-link">
+          Speak to our team <ArrowRight />
+        </Link>
+      </aside>
+    </div>
+  )
+}
+
 function SimplePage({
   title,
   body,
@@ -9912,6 +9985,9 @@ function AdminCmsPages() {
   const [notice, setNotice] = useState("")
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState("")
+  const claims = getSessionClaims()
+  const canDelete = ["super_admin", "manager"].includes(claims?.role ?? "")
 
   const load = () =>
     adminFetch<{ pages: typeof pages }>("/api/admin/pages")
@@ -9992,6 +10068,38 @@ function AdminCmsPages() {
       setError(e instanceof Error ? e.message : "We could not save this page.")
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function removePage(page: { slug: string; title: string }) {
+    if (
+      !window.confirm(
+        `Delete the page “${page.title}”? This cannot be undone.`,
+      )
+    )
+      return
+    setDeleting(page.slug)
+    setError("")
+    setNotice("")
+    try {
+      const response = await fetch(
+        `/api/admin/pages/${encodeURIComponent(page.slug)}`,
+        { method: "DELETE", headers: authHeaders() },
+      )
+      if (!response.ok && response.status !== 404) {
+        const data = await response.json().catch(() => null)
+        throw new Error(data?.error ?? "We could not delete this page.")
+      }
+      setNotice(`Deleted “${page.title}”.`)
+      await load()
+    } catch (actionError) {
+      setError(
+        actionError instanceof Error
+          ? actionError.message
+          : "We could not delete this page.",
+      )
+    } finally {
+      setDeleting("")
     }
   }
 
@@ -10216,6 +10324,15 @@ function AdminCmsPages() {
                       <Link to={`/${page.slug}`} className="button button-outline">
                         Preview
                       </Link>
+                      {canDelete && (
+                        <button
+                          type="button"
+                          disabled={deleting === page.slug}
+                          onClick={() => removePage(page)}
+                        >
+                          {deleting === page.slug ? "Deleting…" : "Delete"}
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -11502,6 +11619,7 @@ export const router = createBrowserRouter([
       { path: "collections/:slug", Component: CollectionDetailPage },
       { path: "forgot-password", Component: ForgotPasswordPage },
       { path: "reset-password", Component: ResetPasswordPage },
+      { path: ":slug", Component: DynamicCmsPage },
       {
         path: "*",
         element: (
