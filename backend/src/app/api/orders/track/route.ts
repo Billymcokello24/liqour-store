@@ -1,0 +1,38 @@
+import { NextRequest, NextResponse } from "next/server";
+import { query } from "@/lib/db";
+import { apiError } from "@/lib/http";
+
+const ORDER_FLOW = ["pending_payment", "payment_confirmed", "confirmed", "preparing", "ready", "out_for_delivery", "delivered"];
+
+export async function GET(request: NextRequest) {
+  try {
+    const orderNumber = request.nextUrl.searchParams.get("orderNumber")?.trim();
+    const contact = request.nextUrl.searchParams.get("contact")?.trim().toLowerCase();
+    if (!orderNumber || !contact) {
+      return NextResponse.json({ error: "An order number and the email or phone used on the order are required." }, { status: 400 });
+    }
+    const result = await query(
+      `SELECT o.order_number, o.status, o.payment_status, o.payment_method, o.delivery_type,
+         o.total_kes, o.placed_at, o.updated_at, o.delivery_address,
+         (SELECT count(*)::int FROM order_items oi WHERE oi.order_id = o.id) AS item_count,
+         (SELECT coalesce(json_agg(json_build_object(
+            'name', oi.product_snapshot->>'name', 'quantity', oi.quantity,
+            'unitPriceKes', oi.unit_price_kes, 'image', oi.image_snapshot_url)), '[]'::json)
+          FROM order_items oi WHERE oi.order_id = o.id) AS items
+       FROM orders o
+       JOIN users u ON u.id = o.customer_id
+       WHERE o.order_number = $1 AND (lower(u.email) = $2 OR replace(u.phone, ' ', '') = replace($2, ' ', ''))`,
+      [orderNumber, contact],
+    );
+    const order = result.rows[0];
+    if (!order) return NextResponse.json({ error: "No order matched those details." }, { status: 404 });
+    const currentStep = ORDER_FLOW.indexOf(order.status);
+    const timeline = ORDER_FLOW.map((step, index) => ({
+      step,
+      reached: order.status === "cancelled" || order.status === "refunded" ? false : index <= currentStep,
+    }));
+    return NextResponse.json({ order, timeline });
+  } catch (error) {
+    return apiError(error);
+  }
+}

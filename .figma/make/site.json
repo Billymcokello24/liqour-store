@@ -1,0 +1,15 @@
+{
+  "title": "Henry's Liquor Hub — Same-day liquor delivery in Nairobi",
+  "description": "Henry's Liquor Hub is a premium e-commerce platform for browsing and purchasing a wide range of alcoholic and non-alcoholic beverages, featuring efficient order management and delivery options.",
+  "language": "en-KE",
+  "robots": {
+    "index": true
+  },
+  "icons": {
+    "icon": "/favicon.svg"
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
