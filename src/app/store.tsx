@@ -45,211 +45,8 @@ export type Order = {
   createdAt: string
 }
 
-export const demoProducts: Product[] = [
-  {
-    id: "p1",
-    name: "Black Label Reserve",
-    brand: "Johnnie Walker",
-    category: "Whisky",
-    volume: "700ml",
-    price: 4500,
-    oldPrice: 5000,
-    stock: 18,
-    rating: 4.9,
-    tag: "Best seller",
-    image:
-      "https://images.unsplash.com/photo-1592620352607-53100d32f9fb?auto=format&fit=crop&w=720&q=85",
-  },
-  {
-    id: "p2",
-    name: "Small Batch Bourbon",
-    brand: "Craft Reserve",
-    category: "Whisky",
-    volume: "750ml",
-    price: 6200,
-    stock: 9,
-    rating: 4.8,
-    tag: "Staff pick",
-    image:
-      "https://images.unsplash.com/photo-1601053397261-2552332609fc?auto=format&fit=crop&w=720&q=85",
-  },
-  {
-    id: "p3",
-    name: "Estate Red Blend",
-    brand: "Aesop Wines",
-    category: "Wine",
-    volume: "750ml",
-    price: 2800,
-    stock: 24,
-    rating: 4.7,
-    tag: "New",
-    image:
-      "https://images.unsplash.com/photo-1592361557476-5c9eea53b04a?auto=format&fit=crop&w=720&q=85",
-  },
-  {
-    id: "p4",
-    name: "Vintage Rosé",
-    brand: "Maison No. 7",
-    category: "Wine",
-    volume: "750ml",
-    price: 3400,
-    oldPrice: 3800,
-    stock: 14,
-    rating: 4.6,
-    tag: "Save KES 400",
-    image:
-      "https://images.unsplash.com/photo-1592119748016-a61c40a44320?auto=format&fit=crop&w=720&q=85",
-  },
-  {
-    id: "p5",
-    name: "Premium Gin No. 4",
-    brand: "Botanical House",
-    category: "Gin",
-    volume: "700ml",
-    price: 3950,
-    stock: 7,
-    rating: 4.8,
-    tag: "Limited",
-    image:
-      "https://images.unsplash.com/photo-1541491263892-731bc0c6a2ae?auto=format&fit=crop&w=720&q=85",
-  },
-  {
-    id: "p6",
-    name: "Cellar Selection",
-    brand: "Henry's",
-    category: "Cognac",
-    volume: "700ml",
-    price: 8900,
-    stock: 5,
-    rating: 5,
-    tag: "Premium",
-    image:
-      "https://images.unsplash.com/photo-1697115355209-46e7bce340fb?auto=format&fit=crop&w=720&q=85",
-  },
-  {
-    id: "p7",
-    name: "Celebration Brut",
-    brand: "Champagne House",
-    category: "Champagne",
-    volume: "750ml",
-    price: 7200,
-    stock: 11,
-    rating: 4.9,
-    image:
-      "https://images.unsplash.com/photo-1700893417207-99da24343476?auto=format&fit=crop&w=720&q=85",
-  },
-  {
-    id: "p8",
-    name: "Classic Tennessee",
-    brand: "Old No. 7",
-    category: "Whisky",
-    volume: "1L",
-    price: 5800,
-    stock: 16,
-    rating: 4.7,
-    image:
-      "https://images.unsplash.com/photo-1611864072666-06ddb3070b19?auto=format&fit=crop&w=720&q=85",
-  },
-]
-
-export const demoOrders: Order[] = [
-  {
-    id: "HLH-2048",
-    items: [],
-    total: 12450,
-    deliveryFee: 300,
-    customer: {
-      name: "Grace Wanjiku",
-      phone: "+254 712 345 678",
-      email: "grace.w@email.com",
-      address: "14 Ngong Road, Karen",
-      area: "Karen",
-    },
-    payment: "M-Pesa",
-    status: "preparing",
-    createdAt: "2026-09-29T09:15:00Z",
-  },
-  {
-    id: "HLH-2047",
-    items: [],
-    total: 6800,
-    deliveryFee: 0,
-    customer: {
-      name: "David Otieno",
-      phone: "+254 722 987 654",
-      email: "d.otieno@email.com",
-      address: "Apartment 4B, Kilimani Court",
-      area: "Kilimani",
-    },
-    payment: "Card",
-    status: "confirmed",
-    createdAt: "2026-09-29T08:44:00Z",
-  },
-  {
-    id: "HLH-2046",
-    items: [],
-    total: 48200,
-    deliveryFee: 0,
-    customer: {
-      name: "Amara Events",
-      phone: "+254 733 112 233",
-      email: "events@amara.co.ke",
-      address: "Gigiri Convention Centre, Gigiri",
-      area: "Gigiri",
-    },
-    payment: "Bank",
-    status: "out-for-delivery",
-    createdAt: "2026-09-28T16:30:00Z",
-  },
-  {
-    id: "HLH-2045",
-    items: [],
-    total: 3950,
-    deliveryFee: 300,
-    customer: {
-      name: "Brian Kamau",
-      phone: "+254 700 556 677",
-      email: "bk@mail.com",
-      address: "Unity Homes, Ruaka",
-      area: "Ruaka",
-    },
-    payment: "M-Pesa",
-    status: "delivered",
-    createdAt: "2026-09-28T11:10:00Z",
-  },
-  {
-    id: "HLH-2044",
-    items: [],
-    total: 9600,
-    deliveryFee: 0,
-    customer: {
-      name: "Sheila Mwamba",
-      phone: "+254 711 884 220",
-      email: "sheila@mwamba.co.ke",
-      address: "Lavington Green, Lavington",
-      area: "Lavington",
-    },
-    payment: "M-Pesa",
-    status: "delivered",
-    createdAt: "2026-09-27T14:55:00Z",
-  },
-  {
-    id: "HLH-2043",
-    items: [],
-    total: 22100,
-    deliveryFee: 0,
-    customer: {
-      name: "TechHub Kenya",
-      phone: "+254 708 123 400",
-      email: "procurement@techhubke.com",
-      address: "Westlands Business Park",
-      area: "Westlands",
-    },
-    payment: "Bank",
-    status: "delivered",
-    createdAt: "2026-09-27T10:20:00Z",
-  },
-]
+export const PLACEHOLDER_IMAGE =
+  "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='800'%20height='800'%20viewBox='0%200%20800%20800'%3E%3Crect%20width='800'%20height='800'%20fill='%23e7e2d6'/%3E%3Cpath%20fill='none'%20stroke='%23b7ae9d'%20stroke-width='14'%20d='M355%20210h90v70l40%2055v280a30%2030%200%200%201-30%2030H345a30%2030%200%200%201-30-30V335l40-55z'/%3E%3Cpath%20fill='none'%20stroke='%23b7ae9d'%20stroke-width='14'%20d='M315%20360h170'/%3E%3C/svg%3E"
 
 type CartItem = Product & { quantity: number }
 export type AppliedCoupon = {
@@ -385,14 +182,12 @@ function toStoreProduct(product: ApiProduct): Product | null {
     rating: 0,
     newArrival: product.new_arrival,
     tag: product.new_arrival ? "New" : undefined,
-    image:
-      product.primary_image ??
-      "https://images.unsplash.com/photo-1592620352607-53100d32f9fb?auto=format&fit=crop&w=720&q=85",
+    image: product.primary_image ?? PLACEHOLDER_IMAGE,
   }
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [products, setProducts] = useState(demoProducts)
+  const [products, setProducts] = useState<Product[]>([])
   const [catalogueLoading, setCatalogueLoading] = useState(true)
   const [cart, setCart] = useState<CartItem[]>(() => {
     try {
@@ -402,7 +197,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return []
     }
   })
-  const [orders, setOrders] = useState<Order[]>(demoOrders)
+  const [orders, setOrders] = useState<Order[]>([])
   const [lastOrder, setLastOrder] = useState<Order | null>(null)
   const [coupon, setCoupon] = useState<AppliedCoupon | null>(null)
 

@@ -60,20 +60,16 @@ import {
 import {
   authHeaders,
   clearSession,
-  demoProducts,
   formatPrice,
   getSessionClaims,
   getSessionToken,
   isStaffRole,
+  PLACEHOLDER_IMAGE,
   ROLE_LABELS,
   useStore,
 } from "./store"
 import type { Order, Product, SessionClaims } from "./store"
 
-const heroImage =
-  "https://images.unsplash.com/photo-1582819509237-d5b75f20ff7a?auto=format&fit=crop&w=1800&q=88"
-const editorialImage =
-  "https://images.unsplash.com/photo-1669804803304-e476993ec594?auto=format&fit=crop&w=1400&q=85"
 
 // ─── NOTIFICATION PULSE (tone + unread badge + toast) ───
 
@@ -765,33 +761,6 @@ function SiteLayout() {
   )
 }
 
-const categories = [
-  {
-    name: "Whisky",
-    count: 48,
-    image:
-      "https://images.unsplash.com/photo-1592620352607-53100d32f9fb?auto=format&fit=crop&w=900&q=82",
-  },
-  {
-    name: "Wine",
-    count: 72,
-    image:
-      "https://images.unsplash.com/photo-1697115355157-c95fbd5250fd?auto=format&fit=crop&w=900&q=82",
-  },
-  {
-    name: "Gin",
-    count: 31,
-    image:
-      "https://images.unsplash.com/photo-1541491263892-731bc0c6a2ae?auto=format&fit=crop&w=900&q=82",
-  },
-  {
-    name: "Champagne",
-    count: 26,
-    image:
-      "https://images.unsplash.com/photo-1700893417209-18dc88c989a0?auto=format&fit=crop&w=900&q=82",
-  },
-]
-
 function ProductCard({ product }: { product: Product }) {
   const { addToCart } = useStore()
   const navigate = useNavigate()
@@ -902,18 +871,54 @@ function ProductSection({
 }
 
 function HomePage() {
-  const { products } = useStore()
+  const { products, catalogueLoading } = useStore()
+  const [homeCategories, setHomeCategories] = useState<
+    Array<{
+      name: string
+      slug: string
+      image_url: string | null
+      product_count: number
+    }>
+  >([])
+  const [banners, setBanners] = useState<
+    Array<{
+      heading: string
+      body: string | null
+      cta_label: string | null
+      cta_url: string | null
+      desktop_image_url: string | null
+    }>
+  >([])
+  useEffect(() => {
+    fetch("/api/catalogue/categories")
+      .then((response) => (response.ok ? response.json() : Promise.reject()))
+      .then((data: { categories?: typeof homeCategories }) => {
+        if (Array.isArray(data.categories)) setHomeCategories(data.categories)
+      })
+      .catch(() => undefined)
+    fetch("/api/banners")
+      .then((response) => (response.ok ? response.json() : Promise.reject()))
+      .then((data: { banners?: typeof banners }) => {
+        if (Array.isArray(data.banners)) setBanners(data.banners)
+      })
+      .catch(() => undefined)
+  }, [])
+  const hero = banners[0]
+  const editorial = banners[1]
+  const visibleCategories = homeCategories.filter((c) => c.product_count > 0)
   return (
     <>
       <section className="hero">
-        <img
-          src={heroImage}
-          alt="Premium spirits displayed on warm timber shelves"
-        />
+        {hero?.desktop_image_url ? (
+          <img src={hero.desktop_image_url} alt={hero.heading} />
+        ) : (
+          <div className="hero-fallback" aria-hidden="true" />
+        )}
         <div className="hero-shade" />
         <div className="hero-content">
           <span className="eyebrow light">
-            Curated in Nairobi · Delivered to your door
+            {hero?.heading ??
+              "Curated in Nairobi · Delivered to your door"}
           </span>
           <h1>
             Good drinks.
@@ -921,12 +926,12 @@ function HomePage() {
             Good times.
           </h1>
           <p>
-            Discover exceptional spirits, wines and celebratory bottles selected
-            for every kind of occasion.
+            {hero?.body ??
+              "Discover exceptional spirits, wines and celebratory bottles selected for every kind of occasion."}
           </p>
           <div className="hero-actions">
-            <Link to="/shop" className="button button-light">
-              Shop the collection
+            <Link to={hero?.cta_url || "/shop"} className="button button-light">
+              {hero?.cta_label || "Shop the collection"}
             </Link>
             <Link to="/shop?view=premium" className="button button-ghost">
               Explore premium
@@ -943,33 +948,33 @@ function HomePage() {
         </div>
       </section>
 
-      <section className="section categories-section">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">Find your pour</span>
-            <h2>Shop by category</h2>
+      {visibleCategories.length > 0 && (
+        <section className="section categories-section">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Find your pour</span>
+              <h2>Shop by category</h2>
+            </div>
+            <p>
+              From quiet evenings to milestone celebrations, begin with a
+              collection made for the moment.
+            </p>
           </div>
-          <p>
-            From quiet evenings to milestone celebrations, begin with a
-            collection made for the moment.
-          </p>
-        </div>
-        <div className="category-grid">
-          {categories.map((category) => {
-            const count = products.filter(
-              (product) => product.category === category.name,
-            ).length
-            if (!count) return null
-            return (
+          <div className="category-grid">
+            {visibleCategories.map((category) => (
               <Link
                 className="category-card"
-                to={`/shop?category=${category.name}`}
-                key={category.name}
+                to={`/shop?category=${encodeURIComponent(category.name)}`}
+                key={category.slug}
               >
-                <img src={category.image} alt={`${category.name} collection`} />
+                <img
+                  src={category.image_url ?? PLACEHOLDER_IMAGE}
+                  alt={`${category.name} collection`}
+                />
                 <div>
                   <span>
-                    {count} {count === 1 ? "bottle" : "bottles"}
+                    {category.product_count}{" "}
+                    {category.product_count === 1 ? "bottle" : "bottles"}
                   </span>
                   <h3>{category.name}</h3>
                   <span className="category-action">
@@ -977,24 +982,40 @@ function HomePage() {
                   </span>
                 </div>
               </Link>
-            )
-          })}
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
+      )}
 
-      <ProductSection
-        eyebrow="The house edit"
-        title="Bottles worth sharing"
-        products={products}
-      />
+      {products.length > 0 ? (
+        <ProductSection
+          eyebrow="The house edit"
+          title="Bottles worth sharing"
+          products={products}
+        />
+      ) : (
+        !catalogueLoading && (
+          <section className="section">
+            <div className="empty-state">
+              <LayoutGrid />
+              <h2>The shelves are being stocked</h2>
+              <p>New bottles are on the way — check back shortly.</p>
+            </div>
+          </section>
+        )
+      )}
 
       <section className="editorial-banner">
         <div className="editorial-image">
-          <img
-            src={editorialImage}
-            alt="A considered collection of premium spirits"
-            loading="lazy"
-          />
+          {editorial?.desktop_image_url ? (
+            <img
+              src={editorial.desktop_image_url}
+              alt="A considered collection of premium spirits"
+              loading="lazy"
+            />
+          ) : (
+            <div className="editorial-fallback" aria-hidden="true" />
+          )}
         </div>
         <div className="editorial-copy">
           <span className="eyebrow light">For memorable gatherings</span>
@@ -1010,11 +1031,13 @@ function HomePage() {
         </div>
       </section>
 
-      <ProductSection
-        eyebrow="Fresh on the shelf"
-        title="New arrivals"
-        products={[...products].reverse()}
-      />
+      {products.length > 1 && (
+        <ProductSection
+          eyebrow="Fresh on the shelf"
+          title="New arrivals"
+          products={[...products].reverse()}
+        />
+      )}
 
       <section className="service-strip">
         {[
@@ -1325,9 +1348,7 @@ function toCardProduct(item: ProductDetail["related"][number]): Product {
     oldPrice: variant?.compareAtPriceKes ?? undefined,
     stock: variant?.stock ?? 0,
     rating: 0,
-    image:
-      item.primary_image ??
-      "https://images.unsplash.com/photo-1592620352607-53100d32f9fb?auto=format&fit=crop&w=720&q=85",
+    image: item.primary_image ?? PLACEHOLDER_IMAGE,
   }
 }
 
@@ -10966,10 +10987,7 @@ function CollectionsIndexPage() {
               className="category-card"
             >
               <img
-                src={
-                  collection.image_url ??
-                  "https://images.unsplash.com/photo-1697115355209-46e7bce340fb?auto=format&fit=crop&w=900&q=82"
-                }
+                src={collection.image_url ?? PLACEHOLDER_IMAGE}
                 alt={collection.name}
                 loading="lazy"
               />
@@ -11078,10 +11096,7 @@ function CategoriesIndexPage() {
               className="category-card"
             >
               <img
-                src={
-                  category.image_url ??
-                  "https://images.unsplash.com/photo-1697115355209-46e7bce340fb?auto=format&fit=crop&w=900&q=82"
-                }
+                src={category.image_url ?? PLACEHOLDER_IMAGE}
                 alt={category.name}
                 loading="lazy"
               />
