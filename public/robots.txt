@@ -5,4 +5,4 @@ Disallow: /account
 Disallow: /cart
 Disallow: /checkout
 
-Sitemap: https://henryliquorhub.co.ke/sitemap.xml
+Sitemap: https://henryliqourhub.co.ke/sitemap.xml

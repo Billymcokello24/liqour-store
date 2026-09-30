@@ -2,7 +2,7 @@
   "name": "Henry's Liquor Hub",
   "short_name": "Henry's Hub",
   "description": "Nairobi's neighbourhood liquor store. Shop whisky, gin, wine, champagne and more with same-day delivery.",
-  "id": "https://henryliquorhub.co.ke/",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Regenerates public/sitemap.xml from the live catalogue for henryliquorhub.co.ke."""
+"""Regenerates public/sitemap.xml from the live catalogue for henryliqourhub.co.ke."""
 import subprocess
 from datetime import date
 from pathlib import Path
 
-DOMAIN = "https://henryliquorhub.co.ke"
+DOMAIN = "https://henryliqourhub.co.ke"
 OUT = Path(__file__).resolve().parent.parent / "public" / "sitemap.xml"
 STATIC = ["/", "/shop", "/categories", "/brands", "/offers", "/new-arrivals", "/collections"]
 
