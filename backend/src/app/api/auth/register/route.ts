@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
 import { apiError } from "@/lib/http";
 import { registrationInput } from "@/lib/validation";
+import { appUrl, emailShell, esc, sendLoggedEmail } from "@/lib/mailer";
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,6 +31,19 @@ export async function POST(request: NextRequest) {
         [created.rows[0].id, JSON.stringify({ email: created.rows[0].email, token: rawToken })],
       );
       return created.rows[0];
+    });
+    await sendLoggedEmail({
+      userId: user.id,
+      templateKey: "welcome",
+      payload: { email: user.email },
+      to: user.email,
+      subject: "Welcome to Henry's Liquor Hub",
+      html: emailShell(
+        "Your account is ready",
+        `<p>Welcome${input.name ? `, ${esc(input.name.split(" ")[0])}` : ""} — your Henry's Liquor Hub account (<strong>${esc(user.email)}</strong>) is now active.</p>` +
+          `<p>Sign in at <a href="${appUrl()}">${appUrl().replace(/^https?:\/\//, "")}</a> to browse the collection, save delivery addresses and track your orders.</p>` +
+          `<p>Same-day delivery in selected Nairobi areas. Drink responsibly — 18+ only.</p>`,
+      ),
     });
     return NextResponse.json({ user: { id: user.id, email: user.email }, message: "Check your email to verify your account." }, { status: 201 });
   } catch (error) {

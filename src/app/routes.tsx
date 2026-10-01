@@ -216,15 +216,18 @@ function useNotificationPulse(enabled: boolean, scope: "admin" | "customer") {
       setUnread(count)
     }
     void load()
-    const timer = window.setInterval(() => void load(), 20000)
+    const timer = window.setInterval(() => void load(), 12000)
     const onVisible = () => {
       if (document.visibilityState === "visible") void load()
     }
+    const onCheck = () => void load()
     document.addEventListener("visibilitychange", onVisible)
+    window.addEventListener("henrys:notifications-check", onCheck)
     return () => {
       active = false
       window.clearInterval(timer)
       document.removeEventListener("visibilitychange", onVisible)
+      window.removeEventListener("henrys:notifications-check", onCheck)
     }
   }, [enabled, scope])
   return {
@@ -262,6 +265,33 @@ function NotificationToast({
         type="button"
         aria-label="Dismiss notification"
         onClick={dismiss}
+      >
+        <X />
+      </button>
+    </div>
+  )
+}
+
+// ─── CART TOAST ───
+
+function CartToast() {
+  const { cartToast, dismissCartToast } = useStore()
+  if (!cartToast) return null
+  return (
+    <div className="cart-toast" role="status">
+      <div className="cart-toast-copy">
+        <strong>Added to cart</strong>
+        <p>{cartToast.name}</p>
+        <small>{cartToast.quantity} in cart</small>
+      </div>
+      <Link to="/cart" className="button button-dark" onClick={dismissCartToast}>
+        View cart
+      </Link>
+      <button
+        type="button"
+        className="cart-toast-close"
+        aria-label="Dismiss"
+        onClick={dismissCartToast}
       >
         <X />
       </button>
@@ -697,6 +727,7 @@ function SiteHeader() {
         </div>
       </header>
       <NotificationToast pulse={customerPulse} />
+      <CartToast />
       <InstallPromptModal install={install} />
     </>
   )
@@ -1938,13 +1969,10 @@ function CartPage() {
 // ─── CHECKOUT ────────────────────────────────────────────────────────────────
 
 type CheckoutForm = {
-  name: string
   phone: string
-  email: string
   address: string
   area: string
   notes: string
-  delivery: "express" | "standard" | "scheduled"
 }
 
 function CheckoutPage() {
@@ -1952,22 +1980,52 @@ function CheckoutPage() {
   const navigate = useNavigate()
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [payMethod, setPayMethod] = useState<"mpesa" | "mpesa-till" | "card" | "bank">("mpesa-till")
+  const [payOnDelivery, setPayOnDelivery] = useState(false)
   const [tillRef, setTillRef] = useState("")
   const [mpesaState, setMpesaState] =
     useState<"idle" | "sending" | "prompt" | "verified">("idle")
   const [checkoutError, setCheckoutError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [form, setForm] = useState<CheckoutForm>({
-    name: "",
     phone: "+254 7",
-    email: "",
     address: "",
     area: "Westlands",
     notes: "",
-    delivery: "standard",
   })
+  const [account, setAccount] = useState<{ name: string; email: string } | null>(
+    null,
+  )
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const session = sessionStorage.getItem("henrys-session")
+
+  useEffect(() => {
+    if (!session) return
+    fetch("/api/auth/me", { headers: authHeaders() })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        const user = data?.user as
+          | { firstName?: string; lastName?: string; email?: string; phone?: string | null }
+          | undefined
+        if (!user) return
+        setAccount({
+          name: [user.firstName, user.lastName].filter(Boolean).join(" "),
+          email: String(user.email ?? ""),
+        })
+        setForm((current) =>
+          current.phone === "+254 7" && user.phone
+            ? { ...current, phone: user.phone }
+            : current,
+        )
+      })
+      .catch(() => undefined)
+  }, [session])
+
+  useEffect(
+    () => () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    },
+    [],
+  )
 
   // ── Login guard: show prompt before cart is even visible ──────────────────
   if (!session && cart.length > 0) {
@@ -2008,13 +2066,7 @@ function CheckoutPage() {
   }
 
   const deliveryFee =
-    form.delivery === "express"
-      ? coupon?.freeDelivery
-        ? 0
-        : 300
-      : cartTotal >= 5000
-        ? 0
-        : 300
+    coupon?.freeDelivery || cartTotal >= 5000 ? 0 : 300
   const total = Math.max(0, cartTotal - (coupon?.discountKes ?? 0)) + deliveryFee
 
   function field(key: keyof CheckoutForm) {
@@ -2062,13 +2114,18 @@ function CheckoutPage() {
             variantId: item.variantId,
             quantity: item.quantity,
           })),
-          paymentMethod: payMethod === "mpesa-till" ? "mpesa" : payMethod,
+          paymentMethod:
+            payMethod === "mpesa" && payOnDelivery
+              ? "cash"
+              : payMethod === "mpesa-till"
+                ? "mpesa"
+                : payMethod,
           deliveryType: "delivery",
           couponCode: coupon?.code,
           deliveryAddress: {
-            name: form.name,
+            name: account?.name ?? "",
             phone: form.phone,
-            email: form.email,
+            email: account?.email ?? "",
             address: form.address,
             area: form.area,
           },
@@ -2091,22 +2148,27 @@ function CheckoutPage() {
         total: data.order.totalKes,
         deliveryFee: data.order.deliveryFeeKes,
         customer: {
-          name: form.name,
+          name: account?.name ?? "Customer",
           phone: form.phone,
-          email: form.email,
+          email: account?.email ?? "",
           address: form.address,
           area: form.area,
         },
         payment:
-          payMethod === "mpesa"
-            ? "M-Pesa"
-            : payMethod === "card"
-              ? "Card"
-              : "Bank Transfer",
+          payMethod === "mpesa" && payOnDelivery
+            ? "Pay on delivery"
+            : payMethod === "mpesa"
+              ? "M-Pesa"
+              : payMethod === "mpesa-till"
+                ? "M-Pesa Buy Goods"
+                : payMethod === "card"
+                  ? "Card"
+                  : "Bank Transfer",
         status: "confirmed",
         createdAt: new Date().toISOString(),
       }
       completeOrder(order)
+      window.dispatchEvent(new Event("henrys:notifications-check"))
       navigate(`/order-confirmation?id=${order.id}`)
     } catch (error) {
       setCheckoutError(
@@ -2118,13 +2180,6 @@ function CheckoutPage() {
       setIsSubmitting(false)
     }
   }
-
-  useEffect(
-    () => () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-    },
-    [],
-  )
 
   if (!cart.length && step < 3)
     return (
@@ -2181,34 +2236,22 @@ function CheckoutPage() {
                 setStep(2)
               }}
             >
-              <h2>Delivery details</h2>
+              <h2>Where should we bring your order?</h2>
+              <p className="co-subhead">
+                Just your phone number and location — we will call you to
+                confirm before the rider leaves.
+              </p>
               <div className="co-fields">
                 <label className="co-label span-2">
-                  Full name
-                  <input
-                    required
-                    placeholder="Grace Wanjiku"
-                    {...field("name")}
-                  />
-                </label>
-                <label className="co-label">
-                  Phone number
+                  Phone number we can call
                   <input
                     required
                     placeholder="+254 7XX XXX XXX"
                     {...field("phone")}
                   />
                 </label>
-                <label className="co-label">
-                  Email address
-                  <input
-                    type="email"
-                    placeholder="you@email.com"
-                    {...field("email")}
-                  />
-                </label>
                 <label className="co-label span-2">
-                  Delivery address
+                  Delivery location
                   <input
                     required
                     placeholder="Building, street or landmark"
@@ -2224,63 +2267,12 @@ function CheckoutPage() {
                   </select>
                 </label>
                 <label className="co-label">
-                  Delivery notes
+                  Notes (optional)
                   <input
                     placeholder="Gate code, floor, etc."
                     {...field("notes")}
                   />
                 </label>
-              </div>
-              <h3>Delivery preference</h3>
-              <div className="delivery-options">
-                {([
-                  {
-                    key: "express",
-                    label: "Express — Today by 6 PM",
-                    fee: "KES 300",
-                    icon: Clock,
-                  },
-                  {
-                    key: "standard",
-                    label: `Standard — Tomorrow 9 AM–6 PM`,
-                    fee: cartTotal >= 5000 ? "Free" : "KES 300",
-                    icon: Truck,
-                  },
-                  {
-                    key: "scheduled",
-                    label: "Scheduled — Pick a date",
-                    fee: "KES 300",
-                    icon: CalendarDays,
-                  },
-                ] as {
-                  key: CheckoutForm["delivery"]
-                  label: string
-                  fee: string
-                  icon: React.ElementType
-                }[]).map(({ key, label, fee, icon: Icon }) => (
-                  <label
-                    key={key}
-                    className={`delivery-option ${
-                      form.delivery === key ? "selected" : ""
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="delivery"
-                      value={key}
-                      checked={form.delivery === key}
-                      onChange={() => setForm({ ...form, delivery: key })}
-                    />
-                    <Icon />
-                    <div>
-                      <strong>{label}</strong>
-                      <span>{fee}</span>
-                    </div>
-                    {form.delivery === key && (
-                      <Check className="delivery-check" />
-                    )}
-                  </label>
-                ))}
               </div>
               <div className="co-actions">
                 <button type="submit" className="button button-dark">
@@ -2396,7 +2388,25 @@ function CheckoutPage() {
                       }
                     />
                   </label>
-                  <div className="mpesa-body">
+                  <label className="cod-check">
+                    <input
+                      type="checkbox"
+                      checked={payOnDelivery}
+                      onChange={(e) => {
+                        setPayOnDelivery(e.target.checked)
+                        setMpesaState("idle")
+                      }}
+                    />
+                    <span>
+                      <strong>Pay on delivery</strong>
+                      <small>
+                        The most popular option — pay the rider by M-Pesa or
+                        cash when your order arrives at your door.
+                      </small>
+                    </span>
+                  </label>
+                  {!payOnDelivery && (
+                    <div className="mpesa-body">
                     <div className="mpesa-info">
                       <p>
                         Tap <strong>Request payment</strong> and you will
@@ -2507,6 +2517,22 @@ function CheckoutPage() {
                       </div>
                     </div>
                   </div>
+                  )}
+                  {payOnDelivery && (
+                    <div className="cod-panel">
+                      <CheckCircle />
+                      <div>
+                        <strong>
+                          Pay {formatPrice(total)} on delivery
+                        </strong>
+                        <p>
+                          Your rider will call {form.phone || "your phone"} on
+                          the way. Pay by M-Pesa or cash at handover — no
+                          online payment needed now.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2563,7 +2589,9 @@ function CheckoutPage() {
                 <button
                   type="button"
                   className="button button-dark"
-                  disabled={payMethod === "mpesa" && mpesaState !== "verified"}
+                  disabled={
+                    payMethod === "mpesa" && !payOnDelivery && mpesaState !== "verified"
+                  }
                   onClick={() => setStep(3)}
                 >
                   Review order <ArrowRight />
@@ -2593,7 +2621,7 @@ function CheckoutPage() {
                     </button>
                   </div>
                   <p>
-                    {form.name} · {form.phone}
+                    {(account?.name || "Your account") + " · " + form.phone}
                   </p>
                   <p>
                     {form.address}, {form.area}, Nairobi
@@ -2608,11 +2636,15 @@ function CheckoutPage() {
                     </button>
                   </div>
                   <p>
-                    {payMethod === "mpesa"
-                      ? `M-Pesa · ${form.phone}`
-                      : payMethod === "card"
-                        ? "Visa / Mastercard"
-                        : "Bank transfer"}
+                    {payMethod === "mpesa" && payOnDelivery
+                      ? "Pay on delivery — M-Pesa or cash at the door"
+                      : payMethod === "mpesa"
+                        ? `M-Pesa · ${form.phone}`
+                        : payMethod === "mpesa-till"
+                          ? "M-Pesa Buy Goods (Till 1755994)"
+                          : payMethod === "card"
+                            ? "Visa / Mastercard"
+                            : "Bank transfer"}
                   </p>
                 </div>
               </div>
@@ -11174,7 +11206,10 @@ type PublicCategoryRow = {
   product_count: number
 }
 
-type PublicBrandRow = PublicCategoryRow & { logo_url: string | null }
+type PublicBrandRow = PublicCategoryRow & {
+  logo_url: string | null
+  image_url: string | null
+}
 
 function CategoriesIndexPage() {
   const [categories, setCategories] = useState<PublicCategoryRow[] | null>(null)
@@ -11277,12 +11312,23 @@ function CategoryDetailPage() {
 
 function BrandsIndexPage() {
   const [brands, setBrands] = useState<PublicBrandRow[] | null>(null)
+  const [search, setSearch] = useState("")
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   useEffect(() => {
     fetch("/api/catalogue/brands")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => data && setBrands(data.brands))
       .catch(() => setBrands([]))
   }, [])
+  const filtered = useMemo(
+    () =>
+      (brands ?? []).filter((brand) =>
+        `${brand.name} ${brand.description ?? ""}`
+          .toLowerCase()
+          .includes(search.trim().toLowerCase()),
+      ),
+    [brands, search],
+  )
   if (!brands)
     return (
       <div className="page-wrap simple-page">
@@ -11299,26 +11345,90 @@ function BrandsIndexPage() {
           bottle.
         </p>
       </div>
+      <div className="shop-toolbar">
+        <label className="search-field">
+          <Search />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search brands"
+            aria-label="Search brands"
+          />
+        </label>
+        <div className="view-toggle">
+          <button
+            type="button"
+            className={viewMode === "grid" ? "active" : ""}
+            onClick={() => setViewMode("grid")}
+            title="Grid view"
+            aria-label="Grid view"
+          >
+            <LayoutGrid size={16} />
+          </button>
+          <button
+            type="button"
+            className={viewMode === "list" ? "active" : ""}
+            onClick={() => setViewMode("list")}
+            title="List view"
+            aria-label="List view"
+          >
+            <List size={16} />
+          </button>
+        </div>
+      </div>
       {!brands.length ? (
         <div className="empty-state">
           <LayoutGrid />
           <h2>Brand pages are on the way</h2>
           <p>Check back shortly to explore the houses behind our shelves.</p>
         </div>
-      ) : (
-        <div className="brand-directory">
-          {brands.map((brand, index) => (
+      ) : !filtered.length ? (
+        <div className="empty-state">
+          <Search />
+          <h2>No brands match that search</h2>
+          <p>Try another producer name.</p>
+        </div>
+      ) : viewMode === "grid" ? (
+        <div className="category-grid">
+          {filtered.map((brand) => (
             <Link
               key={brand.slug}
               to={`/brands/${brand.slug}`}
-              className="brand-directory-item"
+              className="category-card"
             >
-              <span>{String(index + 1).padStart(2, "0")}</span>
-              <h2>{brand.name}</h2>
-              {brand.description && <p>{brand.description}</p>}
-              <small>
-                {brand.product_count} bottles <ArrowRight />
-              </small>
+              <img
+                src={brand.image_url ?? brand.logo_url ?? PLACEHOLDER_IMAGE}
+                alt={brand.name}
+                loading="lazy"
+              />
+              <div>
+                <h2>{brand.name}</h2>
+                <p>{brand.product_count} bottles</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <div className="brand-list">
+          {filtered.map((brand) => (
+            <Link
+              key={brand.slug}
+              to={`/brands/${brand.slug}`}
+              className="brand-list-row"
+            >
+              <img
+                src={brand.logo_url ?? brand.image_url ?? PLACEHOLDER_IMAGE}
+                alt=""
+                loading="lazy"
+              />
+              <div className="blr-info">
+                <strong>{brand.name}</strong>
+                <small>
+                  {brand.description ?? "Producer profile coming soon"}
+                </small>
+              </div>
+              <span className="blr-count">{brand.product_count} bottles</span>
+              <ArrowRight />
             </Link>
           ))}
         </div>

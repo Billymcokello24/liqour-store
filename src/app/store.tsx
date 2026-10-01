@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react"
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react"
 import type { ReactNode } from "react"
 
 export type Product = {
@@ -67,6 +67,8 @@ type StoreValue = {
   applyCoupon: (code: string, subtotalKes: number) => Promise<{ ok: boolean; reason?: string }>
   clearCoupon: () => void
   addToCart: (product: Product) => void
+  cartToast: { name: string; quantity: number } | null
+  dismissCartToast: () => void
   changeQuantity: (id: string, change: number) => void
   removeFromCart: (id: string) => void
   clearCart: () => void
@@ -200,6 +202,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([])
   const [lastOrder, setLastOrder] = useState<Order | null>(null)
   const [coupon, setCoupon] = useState<AppliedCoupon | null>(null)
+  const [cartToast, setCartToast] = useState<{ name: string; quantity: number } | null>(null)
+  const cartToastTimer = useRef<number | null>(null)
 
   useEffect(() => {
     localStorage.setItem("henrys-cart", JSON.stringify(cart))
@@ -252,7 +256,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return { ok: true }
       },
       clearCoupon: () => setCoupon(null),
-      addToCart: (product) =>
+      addToCart: (product) => {
         setCart((current) => {
           const found = current.find((item) => item.id === product.id)
           return found
@@ -262,7 +266,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                   : item,
               )
             : [...current, { ...product, quantity: 1 }]
-        }),
+        })
+        setCartToast({
+          name: product.name,
+          quantity: (cart.find((item) => item.id === product.id)?.quantity ?? 0) + 1,
+        })
+        if (cartToastTimer.current !== null) window.clearTimeout(cartToastTimer.current)
+        cartToastTimer.current = window.setTimeout(
+          () => setCartToast(null),
+          3200,
+        )
+      },
+      cartToast,
+      dismissCartToast: () => setCartToast(null),
       changeQuantity: (id, change) =>
         setCart((current) =>
           current.map((item) =>
@@ -311,7 +327,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ])
       },
     }),
-    [products, catalogueLoading, cart, orders, lastOrder, coupon],
+    [products, catalogueLoading, cart, orders, lastOrder, coupon, cartToast],
   )
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>

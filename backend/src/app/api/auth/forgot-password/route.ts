@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
 import { apiError } from "@/lib/http";
 import { generateRawToken, hashToken } from "@/lib/tokens";
+import { appUrl, emailShell, sendLoggedEmail } from "@/lib/mailer";
 import { z } from "zod";
 
 const inputSchema = z.object({ email: z.string().email() });
@@ -29,11 +30,19 @@ export async function POST(request: NextRequest) {
          VALUES ($1, $2, 'password_reset', now() + interval '60 minutes')`,
         [found.id, hashToken(rawToken)],
       );
-      await client.query(
-        `INSERT INTO notification_log (user_id, channel, template_key, payload)
-         VALUES ($1, 'email', 'password-reset', $2)`,
-        [found.id, JSON.stringify({ email: found.email, token: rawToken, expiresInMinutes: 60 })],
-      );
+    });
+    await sendLoggedEmail({
+      userId: found.id,
+      templateKey: "password-reset",
+      payload: { email: found.email, expiresInMinutes: 60 },
+      to: found.email,
+      subject: "Reset your Henry's Liquor Hub password",
+      html: emailShell(
+        "Reset your password",
+        `<p>We received a request to reset the password for <strong>${found.email}</strong>.</p>` +
+          `<p style="margin:20px 0"><a href="${appUrl()}/reset-password?token=${encodeURIComponent(rawToken)}" style="display:inline-block;padding:12px 22px;background:#1d1b16;color:#ffffff;text-decoration:none;font-size:14px">Choose a new password</a></p>` +
+          `<p>This link expires in 60 minutes. If you did not request a reset, you can safely ignore this email — your password stays unchanged.</p>`,
+      ),
     });
     return genericResponse;
   } catch (error) {

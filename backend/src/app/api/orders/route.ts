@@ -3,6 +3,14 @@ import { requireSession } from "@/lib/auth";
 import { query, transaction } from "@/lib/db";
 import { apiError } from "@/lib/http";
 import { orderInput } from "@/lib/validation";
+import { emailShell, esc, sendLoggedEmail } from "@/lib/mailer";
+
+const PAYMENT_LABELS: Record<string, string> = {
+  mpesa: "M-Pesa",
+  card: "Card",
+  bank: "Bank transfer",
+  cash: "Pay on delivery (M-Pesa or cash at the door)",
+};
 
 type VariantRow = { id: string; sku: string; price_kes: number; stock_on_hand: number; reserved_stock: number; name: string; slug: string; brand: string; volume_ml: number };
 
@@ -97,8 +105,8 @@ export async function POST(request: NextRequest) {
          VALUES ($1, 'in_app', 'order-created', $2)`,
         [session.userId, JSON.stringify({ orderNumber: created.rows[0].order_number, totalKes: subtotal - discount + deliveryFee, message: "We have received your order and are preparing it now." })],
       );
-      const buyer = await client.query<{ first_name: string; last_name: string }>(
-        "SELECT first_name, last_name FROM users WHERE id = $1",
+      const buyer = await client.query<{ first_name: string; last_name: string; email: string }>(
+        "SELECT first_name, last_name, email FROM users WHERE id = $1",
         [session.userId],
       );
       const staff = await client.query<{ id: string }>(
@@ -132,8 +140,37 @@ export async function POST(request: NextRequest) {
         );
         await client.query(`INSERT INTO inventory_transactions (variant_id, change_quantity, reason, reference_type, reference_id, created_by) VALUES ($1, $2, 'order_reservation', 'order', $3, $4)`, [line.variant.id, -line.quantity, created.rows[0].id, session.userId]);
       }
-      return { ...created.rows[0], subtotalKes: subtotal, discountKes: discount, deliveryFeeKes: deliveryFee, totalKes: subtotal - discount + deliveryFee };
+      return {
+        ...created.rows[0],
+        subtotalKes: subtotal,
+        discountKes: discount,
+        deliveryFeeKes: deliveryFee,
+        totalKes: subtotal - discount + deliveryFee,
+        customerName: `${buyer.rows[0]?.first_name ?? ""} ${buyer.rows[0]?.last_name ?? ""}`.trim() || "Customer",
+        customerEmail: buyer.rows[0]?.email ?? null,
+        items: lines.map((line) => ({ name: line.variant.name, quantity: line.quantity, priceKes: line.variant.price_kes })),
+        addressLine: [address.address, address.area].filter(Boolean).join(", "),
+      };
     });
+    if (order.customerEmail) {
+      const money = (n: number) => `KES ${n.toLocaleString("en-KE")}`;
+      await sendLoggedEmail({
+        userId: session.userId,
+        templateKey: "order-confirmation",
+        payload: { orderNumber: order.order_number, totalKes: order.totalKes },
+        to: order.customerEmail,
+        subject: `Order ${order.order_number} confirmed`,
+        html: emailShell(
+          "Thank you — your order is confirmed",
+          `<p>Hi ${esc(order.customerName)}, we have received order <strong>${esc(order.order_number)}</strong>.</p>` +
+            `<ul style="padding-left:18px;margin:14px 0">${order.items.map((line) => `<li>${esc(line.name)} × ${line.quantity} — ${money(line.priceKes * line.quantity)}</li>`).join("")}</ul>` +
+            `<p><strong>Total: ${money(order.totalKes)}</strong> (delivery ${order.deliveryFeeKes === 0 ? "free" : money(order.deliveryFeeKes)})</p>` +
+            `<p>Payment: ${esc(PAYMENT_LABELS[input.paymentMethod] ?? input.paymentMethod)}</p>` +
+            (order.addressLine ? `<p>Delivering to: ${esc(order.addressLine)}</p>` : "") +
+            `<p>Follow this order from your account — our team will call you before the rider leaves.</p>`,
+        ),
+      });
+    }
     return NextResponse.json({ order }, { status: 201 });
   } catch (error) {
     return apiError(error);
