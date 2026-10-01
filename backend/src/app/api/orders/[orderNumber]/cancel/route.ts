@@ -44,7 +44,7 @@ export async function POST(
         );
         await client.query(
           `INSERT INTO inventory_transactions (variant_id, change_quantity, reason, reference_type, reference_id, created_by)
-           VALUES ($1, $2, 'order_cancellation_release', 'order', $3, $4)`,
+           VALUES ($1, $2, 'order_release', 'order', $3, $4)`,
           [item.product_variant_id, item.quantity, order.id, session.userId],
         );
       }
