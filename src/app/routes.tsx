@@ -197,6 +197,24 @@ async function registerPushSubscription(requestPermission: boolean) {
   return true
 }
 
+// One-time permission prompt on login/registration; silent afterwards.
+async function enablePushAutomatically() {
+  if (!pushSupported()) return
+  const prompted = localStorage.getItem("henrys-push-prompted") === "true"
+  if (!prompted) {
+    localStorage.setItem("henrys-push-prompted", "true")
+    if (Notification.permission === "default") {
+      const result = await Notification.requestPermission().catch(
+        () => "denied" as NotificationPermission,
+      )
+      if (result !== "granted") return
+    }
+  }
+  if (Notification.permission === "granted") {
+    await registerPushSubscription(false)
+  }
+}
+
 async function unregisterPushSubscription() {
   const registration = await navigator.serviceWorker.ready.catch(() => null)
   const subscription = await registration?.pushManager.getSubscription()
@@ -247,7 +265,11 @@ function usePushMessaging() {
       .catch(() => undefined)
   }, [])
   useEffect(() => {
-    if (localStorage.getItem("henrys-push-enabled") && getSessionToken()) {
+    const wantsPush = localStorage.getItem("henrys-push-enabled") === "true"
+    const granted =
+      typeof Notification !== "undefined" &&
+      Notification.permission === "granted"
+    if (getSessionToken() && (wantsPush || granted)) {
       // keep the subscription attached to the signed-in account
       void registerPushSubscription(false)
     }
@@ -4252,6 +4274,7 @@ function LoginPage() {
                 return
               }
               setSessionToken(data.token)
+              void enablePushAutomatically()
               const staff = data.user.role !== "customer"
               const destination =
                 sessionStorage.getItem("henrys-return-to") ??
@@ -4388,6 +4411,7 @@ function RegisterPage() {
               }
               setMessage(data.message)
               event.currentTarget.reset()
+              void enablePushAutomatically()
             }}
           >
             <div className="register-fields">

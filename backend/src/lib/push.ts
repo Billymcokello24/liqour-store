@@ -25,13 +25,14 @@ type SubscriptionRow = { id: string; endpoint: string; p256dh: string; auth: str
 export type PushMessage = { title: string; body: string; url: string; tag: string };
 
 export async function sendPushToUser(userId: string, message: PushMessage) {
-  if (!pushConfigured()) return { sent: 0, dropped: 0 };
+  if (!pushConfigured()) return { sent: 0, dropped: 0, subs: 0, lastError: "VAPID keys not configured." };
   const rows = await query<SubscriptionRow>(
     "SELECT id, endpoint, p256dh, auth FROM web_push_subscriptions WHERE user_id = $1",
     [userId],
   );
   let sent = 0;
   let dropped = 0;
+  let lastError = "";
   await Promise.all(
     rows.rows.map(async (row) => {
       try {
@@ -47,11 +48,14 @@ export async function sendPushToUser(userId: string, message: PushMessage) {
         if (statusCode === 404 || statusCode === 410) {
           await query("DELETE FROM web_push_subscriptions WHERE id = $1", [row.id]);
           dropped += 1;
+        } else {
+          lastError = `${statusCode} ${String((error as { body?: unknown }).body ?? (error as Error).message)}`.slice(0, 500);
+          console.error("[push] send failed", { userId, statusCode, body: (error as { body?: unknown }).body });
         }
       }
     }),
   );
-  return { sent, dropped };
+  return { sent, dropped, subs: rows.rows.length, lastError };
 }
 
 export async function upsertSubscription(input: {
