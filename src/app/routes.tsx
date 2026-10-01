@@ -147,6 +147,166 @@ function ensureAudioUnlock() {
   window.addEventListener("keydown", unlock)
 }
 
+// ─── WEB PUSH (installed PWA alerts) ───
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/")
+  const rawData = window.atob(base64)
+  const outputArray = new Uint8Array(rawData.length)
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i)
+  return outputArray
+}
+
+function pushSupported() {
+  return (
+    typeof window !== "undefined" &&
+    "serviceWorker" in navigator &&
+    "PushManager" in window &&
+    "Notification" in window
+  )
+}
+
+async function registerPushSubscription(requestPermission: boolean) {
+  if (!pushSupported()) return false
+  if (requestPermission && Notification.permission !== "granted") {
+    const permission = await Notification.requestPermission()
+    if (permission !== "granted") return false
+  }
+  if (Notification.permission !== "granted") return false
+  const registration = await navigator.serviceWorker.ready
+  const response = await fetch("/api/push/public-key")
+  if (!response.ok) return false
+  const { key } = (await response.json()) as { key: string }
+  let subscription = await registration.pushManager.getSubscription()
+  if (!subscription) {
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(key),
+    })
+  }
+  const saved = await fetch("/api/push/subscription", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(subscription.toJSON()),
+  })
+  if (!saved.ok) return false
+  localStorage.setItem("henrys-push-enabled", "true")
+  window.dispatchEvent(new Event("henrys:push-state"))
+  return true
+}
+
+async function unregisterPushSubscription() {
+  const registration = await navigator.serviceWorker.ready.catch(() => null)
+  const subscription = await registration?.pushManager.getSubscription()
+  if (subscription) {
+    await fetch("/api/push/subscription", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ endpoint: subscription.endpoint }),
+    }).catch(() => undefined)
+    await subscription.unsubscribe().catch(() => undefined)
+  }
+  localStorage.removeItem("henrys-push-enabled")
+  window.dispatchEvent(new Event("henrys:push-state"))
+}
+
+let pushMessagingBound = false
+
+function usePushMessaging() {
+  useEffect(() => {
+    if (pushMessagingBound || !("serviceWorker" in navigator)) return
+    pushMessagingBound = true
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; url?: string } | null
+      if (!data || typeof data.type !== "string") return
+      if (data.type === "henrys-push") {
+        ensureAudioUnlock()
+        // the notification pulse replays the toast + ting on this re-check
+        window.dispatchEvent(new Event("henrys:notifications-check"))
+      }
+      if (
+        data.type === "henrys-push-resubscribe" &&
+        localStorage.getItem("henrys-push-enabled")
+      ) {
+        void registerPushSubscription(false)
+      }
+      if (data.type === "henrys-navigate" && typeof data.url === "string") {
+        window.history.pushState({}, "", data.url)
+        window.dispatchEvent(new PopStateEvent("popstate"))
+      }
+    }
+    void navigator.serviceWorker.ready
+      .then((registration) =>
+        registration.addEventListener(
+          "message",
+          (event) => onMessage(event as MessageEvent),
+        ),
+      )
+      .catch(() => undefined)
+  }, [])
+  useEffect(() => {
+    if (localStorage.getItem("henrys-push-enabled") && getSessionToken()) {
+      // keep the subscription attached to the signed-in account
+      void registerPushSubscription(false)
+    }
+  }, [])
+}
+
+function PushAlertsToggle() {
+  const [enabled, setEnabled] = useState(
+    () => localStorage.getItem("henrys-push-enabled") === "true",
+  )
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState("")
+  useEffect(() => {
+    const sync = () =>
+      setEnabled(localStorage.getItem("henrys-push-enabled") === "true")
+    window.addEventListener("henrys:push-state", sync)
+    return () => window.removeEventListener("henrys:push-state", sync)
+  }, [])
+  if (!pushSupported()) return null
+  return (
+    <div className="push-toggle">
+      <div>
+        <strong>Alerts on this device</strong>
+        <p>
+          Receive order and delivery notifications on your phone, even when the
+          app is closed.
+        </p>
+        {note && <span className="push-note">{note}</span>}
+      </div>
+      <button
+        type="button"
+        className={enabled ? "button button-outline" : "button button-dark"}
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true)
+          setNote("")
+          if (enabled) {
+            await unregisterPushSubscription()
+          } else {
+            if (Notification.permission === "denied") {
+              setNote(
+                "Your browser is blocking notifications for this site. Re-enable them in site settings, then try again.",
+              )
+            } else {
+              const ok = await registerPushSubscription(true)
+              if (!ok)
+                setNote(
+                  "We could not switch on alerts. Please allow the browser prompt and try again.",
+                )
+            }
+          }
+          setBusy(false)
+        }}
+      >
+        {busy ? "Working…" : enabled ? "Turn off" : "Allow notifications"}
+      </button>
+    </div>
+  )
+}
+
 function describeNotification(
   row: NotificationRow,
 ): { title: string; lines: string[] } {
@@ -782,6 +942,7 @@ function AgeGate() {
 }
 
 function SiteLayout() {
+  usePushMessaging()
   return (
     <div className="app-shell">
       <AgeGate />
@@ -4717,14 +4878,18 @@ function AccountPage() {
   const renderNotifications = () => {
     if (!notifications.length)
       return (
-        <div className="empty-state">
-          <Bell />
-          <h2>No notifications yet</h2>
-          <p>Order, delivery and support updates will appear here.</p>
-        </div>
+        <>
+          <PushAlertsToggle />
+          <div className="empty-state">
+            <Bell />
+            <h2>No notifications yet</h2>
+            <p>Order, delivery and support updates will appear here.</p>
+          </div>
+        </>
       )
     return (
       <>
+        <PushAlertsToggle />
         <button
           type="button"
           className="button button-outline"
@@ -6831,6 +6996,7 @@ function AdminPage() {
     "admin",
   )
   const adminInstall = useAppInstall()
+  usePushMessaging()
   const [showAdd, setShowAdd] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [pendingOrders, setPendingOrders] = useState(0)
@@ -10249,6 +10415,7 @@ function AdminNotifications() {
           Mark all as read
         </button>
       </div>
+      <PushAlertsToggle />
       <AdminNotice message={error} />
       {loading ? (
         <p className="empty-copy">Loading live data…</p>

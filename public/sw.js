@@ -1,4 +1,4 @@
-const CACHE = "henrys-hub-v1";
+const CACHE = "henrys-hub-v2";
 const SHELL = ["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -18,6 +18,61 @@ self.addEventListener("activate", (event) => {
       .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)))),
   );
   self.clients.claim();
+});
+
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { title: "Henry's Liquor Hub", body: event.data ? event.data.text() : "" };
+  }
+  const title = data.title || "Henry's Liquor Hub";
+  const options = {
+    body: data.body || "",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: data.tag || "henrys",
+    data: { url: data.url || "/" },
+    showTimestamp: true,
+    timestamp: Date.now(),
+    vibrate: [120, 60, 120],
+  };
+  event.waitUntil(
+    self.registration.showNotification(title, options).then(() =>
+      self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+        for (const client of clients) {
+          client.postMessage({ type: "henrys-push", title, body: options.body, url: options.data.url });
+        }
+      }),
+    ),
+  );
+});
+
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        client.postMessage({ type: "henrys-push-resubscribe" });
+      }
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || "/";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ("focus" in client) {
+          client.postMessage({ type: "henrys-navigate", url: target });
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(target);
+    }),
+  );
 });
 
 self.addEventListener("fetch", (event) => {
