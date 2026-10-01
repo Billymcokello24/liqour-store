@@ -66,7 +66,11 @@ export async function PATCH(
       total_kes: number;
     }>(
       `UPDATE orders
-       SET status = $1, updated_at = now()
+       SET status = $1, updated_at = now(),
+           payment_status = CASE
+             WHEN $1 = 'delivered' AND payment_method = 'cash' THEN 'paid'
+             ELSE payment_status
+           END
        WHERE id = $2
        RETURNING id, status, customer_id, order_number, total_kes`,
       [input.status, orderId],
