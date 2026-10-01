@@ -68,7 +68,7 @@ export async function PATCH(
       `UPDATE orders
        SET status = $1, updated_at = now(),
            payment_status = CASE
-             WHEN $1 = 'delivered' AND payment_method = 'cash' THEN 'paid'
+             WHEN $1 = 'delivered' AND payment_method = 'cash' THEN 'successful'
              ELSE payment_status
            END
        WHERE id = $2

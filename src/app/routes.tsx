@@ -2834,9 +2834,11 @@ const trackStepLabels: Record<string, { label: string; desc: string }> = {
 
 const paymentStatusLabels: Record<string, string> = {
   pending: "Awaiting payment",
-  paid: "Paid",
-  refunded: "Refunded",
+  processing: "Payment processing",
+  successful: "Paid",
   failed: "Payment failed",
+  cancelled: "Payment cancelled",
+  refunded: "Refunded",
 }
 
 // ─── PRINTABLE RECEIPT ────────────────────────────────────────────────────────
