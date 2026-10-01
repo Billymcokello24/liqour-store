@@ -12,7 +12,7 @@ const PAYMENT_LABELS: Record<string, string> = {
   cash: "Pay on delivery (M-Pesa or cash at the door)",
 };
 
-type VariantRow = { id: string; sku: string; price_kes: number; stock_on_hand: number; reserved_stock: number; name: string; slug: string; brand: string; volume_ml: number };
+type VariantRow = { id: string; sku: string; price_kes: number; stock_on_hand: number; reserved_stock: number; name: string; slug: string; brand: string; volume_ml: number; primary_image: string | null };
 
 export async function GET(request: NextRequest) {
   try {
@@ -44,7 +44,9 @@ export async function POST(request: NextRequest) {
     const order = await transaction(async (client) => {
       const ids = input.items.map((item) => item.variantId);
       const result = await client.query<VariantRow>(
-        `SELECT v.id, v.sku, v.price_kes, v.stock_on_hand, v.reserved_stock, v.volume_ml, p.name, p.slug, b.name AS brand
+        `SELECT v.id, v.sku, v.price_kes, v.stock_on_hand, v.reserved_stock, v.volume_ml, p.name, p.slug, b.name AS brand,
+           (SELECT m.public_url FROM product_images pi JOIN media_assets m ON m.id = pi.media_id
+            WHERE pi.product_id = p.id ORDER BY pi.is_primary DESC, pi.sort_order LIMIT 1) AS primary_image
          FROM product_variants v JOIN products p ON p.id = v.product_id JOIN brands b ON b.id = p.brand_id
          WHERE v.id = ANY($1::uuid[]) AND v.is_active AND p.status = 'active' AND p.deleted_at IS NULL
          FOR UPDATE`,
@@ -134,9 +136,9 @@ export async function POST(request: NextRequest) {
       for (const line of lines) {
         await client.query(`UPDATE product_variants SET reserved_stock = reserved_stock + $1, updated_at = now() WHERE id = $2`, [line.quantity, line.variant.id]);
         await client.query(
-          `INSERT INTO order_items (order_id, product_variant_id, quantity, unit_price_kes, product_snapshot)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [created.rows[0].id, line.variant.id, line.quantity, line.variant.price_kes, JSON.stringify({ name: line.variant.name, slug: line.variant.slug, brand: line.variant.brand, sku: line.variant.sku, volumeMl: line.variant.volume_ml })],
+          `INSERT INTO order_items (order_id, product_variant_id, quantity, unit_price_kes, product_snapshot, image_snapshot_url)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [created.rows[0].id, line.variant.id, line.quantity, line.variant.price_kes, JSON.stringify({ name: line.variant.name, slug: line.variant.slug, brand: line.variant.brand, sku: line.variant.sku, volumeMl: line.variant.volume_ml }), line.variant.primary_image],
         );
         await client.query(`INSERT INTO inventory_transactions (variant_id, change_quantity, reason, reference_type, reference_id, created_by) VALUES ($1, $2, 'order_reservation', 'order', $3, $4)`, [line.variant.id, -line.quantity, created.rows[0].id, session.userId]);
       }
