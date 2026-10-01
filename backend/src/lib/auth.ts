@@ -40,3 +40,20 @@ export async function requireSession(request: NextRequest, roles?: Role[]) {
     throw new Response("Invalid or expired session.", { status: 401 });
   }
 }
+
+export async function readSession(request: NextRequest): Promise<Session | null> {
+  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, authSecret());
+    const session: Session = {
+      userId: payload.sub ?? "",
+      email: String(payload.email ?? ""),
+      role: payload.role as Role,
+    };
+    if (!session.userId || !session.role) return null;
+    return session;
+  } catch {
+    return null;
+  }
+}

@@ -34,6 +34,7 @@ import {
   List,
   Lock,
   LogOut,
+  Mail,
   MapPin,
   Menu,
   Minus,
@@ -2115,7 +2116,7 @@ function CheckoutPage() {
             quantity: item.quantity,
           })),
           paymentMethod:
-            payMethod === "mpesa" && payOnDelivery
+            payOnDelivery && (payMethod === "mpesa" || payMethod === "mpesa-till")
               ? "cash"
               : payMethod === "mpesa-till"
                 ? "mpesa"
@@ -2130,7 +2131,7 @@ function CheckoutPage() {
             area: form.area,
           },
           customerNote:
-            payMethod === "mpesa-till"
+            payMethod === "mpesa-till" && !payOnDelivery
               ? `M-Pesa Buy Goods Till 1755994 (Ref: ${tillRef || "1755994"}). ${form.notes}`
               : form.notes || undefined,
         }),
@@ -2155,7 +2156,8 @@ function CheckoutPage() {
           area: form.area,
         },
         payment:
-          payMethod === "mpesa" && payOnDelivery
+          payOnDelivery &&
+          (payMethod === "mpesa" || payMethod === "mpesa-till")
             ? "Pay on delivery"
             : payMethod === "mpesa"
               ? "M-Pesa"
@@ -2320,6 +2322,25 @@ function CheckoutPage() {
 
               {payMethod === "mpesa-till" && (
                 <div className="mpesa-panel">
+                  <label className="cod-check">
+                    <input
+                      type="checkbox"
+                      checked={payOnDelivery}
+                      onChange={(e) => {
+                        setPayOnDelivery(e.target.checked)
+                        setMpesaState("idle")
+                      }}
+                    />
+                    <span>
+                      <strong>Pay on delivery</strong>
+                      <small>
+                        Skip the till payment now — pay the rider by M-Pesa or
+                        cash when your order arrives at your door.
+                      </small>
+                    </span>
+                  </label>
+                  {!payOnDelivery && (
+                    <>
                   <div className="mpesa-till-box">
                     <span className="eyebrow light">Lipa na M-Pesa</span>
                     <h3 style={{ fontSize: 18, margin: "6px 0", color: "#ffffff" }}>BUY GOODS TILL NUMBER</h3>
@@ -2373,6 +2394,23 @@ function CheckoutPage() {
                       </div>
                     )}
                   </div>
+                    </>
+                  )}
+                  {payOnDelivery && (
+                    <div className="cod-panel">
+                      <CheckCircle />
+                      <div>
+                        <strong>
+                          Pay {formatPrice(total)} on delivery
+                        </strong>
+                        <p>
+                          Nothing to pay now. Our rider will call{" "}
+                          {form.phone} before leaving, and you settle the full
+                          amount by M-Pesa or cash at your door.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2636,7 +2674,8 @@ function CheckoutPage() {
                     </button>
                   </div>
                   <p>
-                    {payMethod === "mpesa" && payOnDelivery
+                    {payOnDelivery &&
+                    (payMethod === "mpesa" || payMethod === "mpesa-till")
                       ? "Pay on delivery — M-Pesa or cash at the door"
                       : payMethod === "mpesa"
                         ? `M-Pesa · ${form.phone}`
@@ -2920,17 +2959,17 @@ function buildReceiptHtml(data: ReceiptData) {
     align-items: center;
     padding: 24px 12px;
   }
+  .btn-row { display: flex; gap: 10px; margin-bottom: 18px; }
   .btn {
-    width: 320px;
-    margin: 0 0 18px;
+    width: 155px;
     padding: 10px;
     font: inherit;
     cursor: pointer;
-    background: #1c1a17;
-    color: #fff;
-    border: none;
     letter-spacing: 1px;
+    border: 1px solid #1c1a17;
   }
+  .btn-print { background: #1c1a17; color: #fff; }
+  .btn-download { background: #fff; color: #1c1a17; }
   .sheet {
     width: 320px;
     background: #fff;
@@ -2966,7 +3005,10 @@ function buildReceiptHtml(data: ReceiptData) {
 </style>
 </head>
 <body>
-  <button class="btn" onclick="window.print()">Print receipt</button>
+  <div class="btn-row">
+    <button class="btn btn-print" onclick="window.print()">Print receipt</button>
+    <button class="btn btn-download" onclick="downloadReceipt()">Download receipt</button>
+  </div>
   <div class="sheet">
     <div class="brand">
       <h1>HENRY'S LIQUOR HUB</h1>
@@ -3022,6 +3064,17 @@ function buildReceiptHtml(data: ReceiptData) {
       }
     </div>
   </div>
+<script>
+  function downloadReceipt() {
+    var blob = new Blob(["<!doctype html>" + document.documentElement.outerHTML], { type: "text/html" });
+    var link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "receipt-${escReceipt(data.orderNumber)}.html";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+</script>
 </body>
 </html>`
 }
@@ -3089,13 +3142,15 @@ function OrderTrackingPage() {
   async function runLookup(num: string, contactValue: string) {
     const orderTrimmed = num.trim()
     const contactTrimmed = contactValue.trim()
-    if (!orderTrimmed || !contactTrimmed) return
+    const staff = isStaffRole(getSessionClaims()?.role)
+    if (!orderTrimmed || (!contactTrimmed && !staff)) return
     setIsSearching(true)
     setError("")
     setResult(null)
     try {
       const response = await fetch(
         `/api/orders/track?orderNumber=${encodeURIComponent(orderTrimmed)}&contact=${encodeURIComponent(contactTrimmed.toLowerCase())}`,
+        { headers: authHeaders() },
       )
       const data = await response.json().catch(() => null)
       if (!response.ok) {
@@ -3112,7 +3167,15 @@ function OrderTrackingPage() {
 
   useEffect(() => {
     const claims = getSessionClaims()
-    if (!claims || claims.role !== "customer") return
+    if (!claims) return
+    if (isStaffRole(claims.role)) {
+      if (orderParam && !autoLookupDone.current) {
+        autoLookupDone.current = true
+        void runLookup(orderParam, "")
+      }
+      return
+    }
+    if (claims.role !== "customer") return
     let cancelled = false
     fetch("/api/auth/me", { headers: authHeaders() })
       .then((response) => (response.ok ? response.json() : Promise.reject()))
@@ -3728,6 +3791,112 @@ function EditorialPage({
   )
 }
 
+type ContactInfo = {
+  phone?: string
+  email?: string
+  whatsapp?: string
+  address?: string
+  mapUrl?: string
+}
+
+function ContactPage() {
+  const [contact, setContact] = useState<ContactInfo | null>(null)
+  const [hours, setHours] = useState<{ weekday?: string; weekend?: string } | null>(
+    null,
+  )
+  useEffect(() => {
+    let active = true
+    fetch("/api/settings")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (!active || !data?.settings) return
+        setContact((data.settings.contact ?? null) as ContactInfo | null)
+        setHours(
+          (data.settings.hours ?? null) as {
+            weekday?: string
+            weekend?: string
+          } | null,
+        )
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [])
+  const whatsappNumber = (contact?.whatsapp ?? contact?.phone ?? "").replace(
+    /[^0-9]/g,
+    "",
+  )
+  const openingHours = [hours?.weekday, hours?.weekend].filter(Boolean).join(" · ")
+  return (
+    <div className="editorial-page">
+      <section>
+        <span className="eyebrow">Here to help</span>
+        <h1>Speak with Henry&rsquo;s.</h1>
+        <p>
+          For recommendations, order questions, delivery help or a custom event
+          proposal, our Nairobi team is ready to help.
+        </p>
+        <div className="contact-cards">
+          {contact?.phone && (
+            <a className="contact-card" href={`tel:${contact.phone}`}>
+              <Phone />
+              <span>Call the team</span>
+              <strong>{contact.phone}</strong>
+            </a>
+          )}
+          {whatsappNumber && (
+            <a
+              className="contact-card"
+              href={`https://wa.me/${whatsappNumber}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <Smartphone />
+              <span>WhatsApp us</span>
+              <strong>{contact?.whatsapp ?? contact?.phone}</strong>
+            </a>
+          )}
+          {contact?.email && (
+            <a className="contact-card" href={`mailto:${contact.email}`}>
+              <Mail />
+              <span>Email</span>
+              <strong>{contact.email}</strong>
+            </a>
+          )}
+          {contact?.address && (
+            <div className="contact-card">
+              <MapPin />
+              <span>Visit / delivery coverage</span>
+              <strong>{contact.address}</strong>
+            </div>
+          )}
+          {openingHours && (
+            <div className="contact-card">
+              <Clock />
+              <span>Opening hours</span>
+              <strong>{openingHours}</strong>
+            </div>
+          )}
+        </div>
+        {contact === null && (
+          <p className="empty-copy">Loading our contact details…</p>
+        )}
+      </section>
+      <aside>
+        <span>Henry&rsquo;s Liquor Hub</span>
+        <p>
+          Responsible retailing, expert recommendations and delivery you can
+          rely on.
+        </p>
+        <Link to="/account" className="inline-link">
+          Manage your account <ArrowRight />
+        </Link>
+      </aside>
+    </div>
+  )
+}
+
 function DynamicCmsPage() {
   const { slug } = useParams<{ slug: string }>()
   const [page, setPage] = useState<
@@ -4133,6 +4302,14 @@ function AccountPage() {
       order_number: string
       status: string
       payment_status: string
+      payment_method: string
+      delivery_type: string
+      delivery_address: {
+        phone?: string
+        address?: string
+        area?: string
+      } | null
+      customer_note: string | null
       total_kes: number
       placed_at: string
     }[]
@@ -4148,43 +4325,123 @@ function AccountPage() {
   } | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState("")
+  const [editingOrder, setEditingOrder] = useState<string | null>(null)
+  const [orderForm, setOrderForm] = useState({
+    phone: "",
+    address: "",
+    area: "",
+    notes: "",
+  })
+  const [orderSaving, setOrderSaving] = useState(false)
+  const [orderBusy, setOrderBusy] = useState<string | null>(null)
+  const [orderActionError, setOrderActionError] = useState("")
 
-  useEffect(() => {
+  const EDITABLE_ORDER_STATUSES = [
+    "pending_payment",
+    "payment_confirmed",
+    "confirmed",
+    "preparing",
+    "ready",
+  ]
+
+  async function loadOverview() {
     const token = getSessionToken()
     if (!token) {
       setLoadError("Sign in to view your account activity.")
       setIsLoading(false)
       return
     }
-
-    let active = true
-
-    fetch("/api/account/overview", {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("We could not load your account.")
-        return response.json()
+    try {
+      const response = await fetch("/api/account/overview", {
+        headers: { Authorization: `Bearer ${token}` },
       })
-      .then((data) => {
-        if (active) setOverview(data)
-      })
-      .catch((error: unknown) => {
-        if (active)
-          setLoadError(
-            error instanceof Error
-              ? error.message
-              : "We could not load your account.",
-          )
-      })
-      .finally(() => {
-        if (active) setIsLoading(false)
-      })
-
-    return () => {
-      active = false
+      if (!response.ok) throw new Error("We could not load your account.")
+      setOverview(await response.json())
+      setLoadError("")
+    } catch (error: unknown) {
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "We could not load your account.",
+      )
+    } finally {
+      setIsLoading(false)
     }
+  }
+
+  useEffect(() => {
+    void loadOverview()
   }, [])
+
+  function openOrderEdit(order: NonNullable<typeof overview>["orders"][number]) {
+    setOrderActionError("")
+    setEditingOrder(order.order_number)
+    setOrderForm({
+      phone: order.delivery_address?.phone ?? "",
+      address: order.delivery_address?.address ?? "",
+      area: order.delivery_address?.area ?? "",
+      notes: order.customer_note ?? "",
+    })
+  }
+
+  async function cancelOrder(orderNumber: string) {
+    if (!window.confirm(`Cancel order ${orderNumber}? This cannot be undone.`))
+      return
+    setOrderBusy(orderNumber)
+    setOrderActionError("")
+    try {
+      const response = await fetch(`/api/orders/${orderNumber}/cancel`, {
+        method: "POST",
+        headers: authHeaders(),
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok)
+        throw new Error(data?.error ?? "We could not cancel this order.")
+      window.dispatchEvent(new Event("henrys:notifications-check"))
+      await loadOverview()
+    } catch (error: unknown) {
+      setOrderActionError(
+        error instanceof Error ? error.message : "We could not cancel this order.",
+      )
+    } finally {
+      setOrderBusy(null)
+    }
+  }
+
+  async function saveOrderEdit(event: React.FormEvent) {
+    event.preventDefault()
+    if (!editingOrder) return
+    setOrderSaving(true)
+    setOrderActionError("")
+    try {
+      const response = await fetch(`/api/orders/${editingOrder}`, {
+        method: "PATCH",
+        headers: {
+          ...authHeaders(),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          phone: orderForm.phone,
+          address: orderForm.address,
+          area: orderForm.area,
+          notes: orderForm.notes || null,
+        }),
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok)
+        throw new Error(data?.error ?? "We could not save these changes.")
+      setEditingOrder(null)
+      await loadOverview()
+    } catch (error: unknown) {
+      setOrderActionError(
+        error instanceof Error
+          ? error.message
+          : "We could not save these changes.",
+      )
+    } finally {
+      setOrderSaving(false)
+    }
+  }
 
   useEffect(() => {
     if (getSessionToken()) void loadProfile()
@@ -4709,26 +4966,141 @@ function AccountPage() {
     if (!overview?.orders.length)
       return <p>No orders yet. Your completed purchases will appear here.</p>
 
-    return overview.orders.map((order) => (
-      <div className="account-order" key={order.order_number}>
-        <div>
-          <strong>{order.order_number}</strong>
-          <span>
-            Placed{" "}
-            {new Date(order.placed_at).toLocaleDateString("en-KE", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })}
-          </span>
-        </div>
-        <span className={`status status-${order.status.replace(/_/g, "-")}`}>
-          {order.status.replace(/_/g, " ")}
-        </span>
-        <strong>{formatPrice(order.total_kes)}</strong>
-        <Link to="/track">Track</Link>
-      </div>
-    ))
+    return (
+      <>
+        {orderActionError && (
+          <p className="form-error">{orderActionError}</p>
+        )}
+        {overview.orders.map((order) => {
+          const editable = EDITABLE_ORDER_STATUSES.includes(order.status)
+          return (
+            <div className="account-order" key={order.order_number}>
+              <div>
+                <strong>{order.order_number}</strong>
+                <span>
+                  Placed{" "}
+                  {new Date(order.placed_at).toLocaleDateString("en-KE", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </span>
+              </div>
+              <span className={`status status-${order.status.replace(/_/g, "-")}`}>
+                {order.status.replace(/_/g, " ")}
+              </span>
+              <strong>{formatPrice(order.total_kes)}</strong>
+              <div className="account-order-actions">
+                {editable && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => openOrderEdit(order)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="danger-link"
+                      disabled={orderBusy === order.order_number}
+                      onClick={() => cancelOrder(order.order_number)}
+                    >
+                      {orderBusy === order.order_number
+                        ? "Cancelling…"
+                        : "Cancel"}
+                    </button>
+                  </>
+                )}
+                <Link to={`/track?order=${order.order_number}`}>Track</Link>
+              </div>
+            </div>
+          )
+        })}
+        {editingOrder && (
+          <div
+            className="modal-overlay"
+            role="dialog"
+            aria-modal="true"
+            onClick={() => setEditingOrder(null)}
+          >
+            <form
+              className="product-modal order-edit-modal"
+              onClick={(e) => e.stopPropagation()}
+              onSubmit={saveOrderEdit}
+            >
+              <div className="modal-head">
+                <div>
+                  <span className="eyebrow">Edit order</span>
+                  <h2>#{editingOrder}</h2>
+                </div>
+                <button
+                  type="button"
+                  className="icon-button"
+                  onClick={() => setEditingOrder(null)}
+                >
+                  <X />
+                </button>
+              </div>
+              {orderActionError && (
+                <div className="form-error">{orderActionError}</div>
+              )}
+              <div className="co-fields">
+                <label className="co-label span-2">
+                  Phone number we can call
+                  <input
+                    required
+                    value={orderForm.phone}
+                    onChange={(e) =>
+                      setOrderForm({ ...orderForm, phone: e.target.value })
+                    }
+                  />
+                </label>
+                <label className="co-label span-2">
+                  Delivery location
+                  <input
+                    required
+                    value={orderForm.address}
+                    onChange={(e) =>
+                      setOrderForm({ ...orderForm, address: e.target.value })
+                    }
+                  />
+                </label>
+                <label className="co-label span-2">
+                  Nairobi area
+                  <input
+                    required
+                    value={orderForm.area}
+                    onChange={(e) =>
+                      setOrderForm({ ...orderForm, area: e.target.value })
+                    }
+                  />
+                </label>
+                <label className="co-label span-2">
+                  Notes (optional)
+                  <textarea
+                    rows={3}
+                    value={orderForm.notes}
+                    onChange={(e) =>
+                      setOrderForm({ ...orderForm, notes: e.target.value })
+                    }
+                    placeholder="Gate code, landmark, timing…"
+                  />
+                </label>
+              </div>
+              <div className="co-actions">
+                <button
+                  type="submit"
+                  className="button button-dark button-wide"
+                  disabled={orderSaving}
+                >
+                  {orderSaving ? "Saving…" : "Save changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+      </>
+    )
   }
 
   const renderBookings = () => {
@@ -12205,120 +12577,253 @@ function ForgotPasswordPage() {
   const [email, setEmail] = useState("")
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
+  const [submitting, setSubmitting] = useState(false)
   return (
-    <div className="auth-page page-wrap">
-      <form
-        className="auth-card"
-        onSubmit={async (event) => {
-          event.preventDefault()
-          setError("")
-          const response = await fetch("/api/auth/forgot-password", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email }),
-          })
-          const data = await response.json().catch(() => null)
-          if (!response.ok) {
-            setError(data?.error ?? "We could not process that request.")
-            return
-          }
-          setMessage(
-            "If that address has an account, a reset link is on its way. Check your inbox.",
-          )
-        }}
-      >
-        <span className="eyebrow">Account recovery</span>
-        <h1>Forgot your password?</h1>
-        <p>Enter your email and we will send you a secure reset link.</p>
-        <label>
-          Email address
-          <input
-            required
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@email.com"
-          />
-        </label>
-        {message && (
-          <div className="form-message">
-            <CheckCircle /> {message}
-          </div>
-        )}
-        {error && <div className="form-error">{error}</div>}
-        <button type="submit" className="button button-dark button-wide">
-          Send reset link
-        </button>
-        <Link to="/login" className="inline-link">
-          Back to sign in <ArrowRight />
+    <div className="auth-page">
+      <section className="auth-aside">
+        <span className="eyebrow light">Henry&rsquo;s Liquor Hub</span>
+        <h1>
+          Locked out?
+          <br />
+          We&rsquo;ll sort that.
+        </h1>
+        <p>
+          Tell us the email on your account and we will send a secure,
+          single-use link to set a new password.
+        </p>
+        <div className="auth-aside-note">
+          <ShieldCheck />
+          <span>Reset links expire automatically and can only be used once.</span>
+        </div>
+      </section>
+      <section className="auth-form-wrap">
+        <Link to="/" className="auth-back">
+          <ChevronRight style={{ transform: "rotate(180deg)" }} /> Back to store
         </Link>
-      </form>
+        <div className="auth-form">
+          <span className="eyebrow">Account recovery</span>
+          <h2>Forgot your password?</h2>
+          <p>Enter your email and we will send you a secure reset link.</p>
+          <form
+            onSubmit={async (event) => {
+              event.preventDefault()
+              setSubmitting(true)
+              setError("")
+              setMessage("")
+              try {
+                const response = await fetch("/api/auth/forgot-password", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ email }),
+                })
+                const data = await response.json().catch(() => null)
+                if (!response.ok) {
+                  setError(
+                    data?.error ?? "We could not process that request.",
+                  )
+                  return
+                }
+                setMessage(
+                  "If that address has an account, a reset link is on its way. Check your inbox and spam folder.",
+                )
+              } catch {
+                setError(
+                  "We could not reach the server. Check your connection and try again.",
+                )
+              } finally {
+                setSubmitting(false)
+              }
+            }}
+          >
+            <label>
+              Email address
+              <input
+                required
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@email.com"
+              />
+            </label>
+            {message && (
+              <div className="form-message">
+                <CheckCircle /> {message}
+              </div>
+            )}
+            {error && <div className="form-error">{error}</div>}
+            <button
+              type="submit"
+              className="button button-dark button-wide"
+              disabled={submitting}
+            >
+              {submitting ? "Sending…" : "Send reset link"} <ArrowRight />
+            </button>
+            <div className="auth-form-row">
+              <Link to="/login" className="text-button">
+                Back to sign in
+              </Link>
+              {message && (
+                <button type="submit" className="text-button">
+                  Resend link
+                </button>
+              )}
+            </div>
+          </form>
+        </div>
+      </section>
     </div>
   )
 }
 
 function ResetPasswordPage() {
   const navigate = useNavigate()
-  const token = new URLSearchParams(window.location.search).get("token") ?? ""
+  const location = useLocation()
+  const token =
+    new URLSearchParams(location.search).get("token") ?? ""
   const [password, setPassword] = useState("")
   const [confirm, setConfirm] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
+  const [success, setSuccess] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   return (
-    <div className="auth-page page-wrap">
-      <form
-        className="auth-card"
-        onSubmit={async (event) => {
-          event.preventDefault()
-          setError("")
-          const response = await fetch("/api/auth/reset-password", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              token,
-              password,
-              confirmPassword: confirm,
-            }),
-          })
-          const data = await response.json().catch(() => null)
-          if (!response.ok) {
-            setError(data?.error ?? "We could not reset your password.")
-            return
-          }
-          navigate("/login")
-        }}
-      >
-        <span className="eyebrow">Account recovery</span>
-        <h1>Choose a new password</h1>
-        {!token && (
-          <div className="form-error">
-            This reset link appears incomplete. Request a new one.
-          </div>
-        )}
-        <label>
-          New password
-          <input
-            required
-            minLength={12}
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </label>
-        <label>
-          Confirm password
-          <input
-            required
-            minLength={12}
-            type="password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-          />
-        </label>
-        {error && <div className="form-error">{error}</div>}
-        <button type="submit" className="button button-dark button-wide">
-          Reset password
-        </button>
-      </form>
+    <div className="auth-page">
+      <section className="auth-aside">
+        <span className="eyebrow light">Henry&rsquo;s Liquor Hub</span>
+        <h1>
+          A fresh key
+          <br />
+          to your shelf.
+        </h1>
+        <p>
+          Choose a new password for your account. Use at least 12 characters
+          you do not reuse anywhere else.
+        </p>
+        <div className="auth-aside-note">
+          <Lock />
+          <span>Your new password is stored with strong encryption.</span>
+        </div>
+      </section>
+      <section className="auth-form-wrap">
+        <Link to="/" className="auth-back">
+          <ChevronRight style={{ transform: "rotate(180deg)" }} /> Back to store
+        </Link>
+        <div className="auth-form">
+          <span className="eyebrow">Account recovery</span>
+          <h2>Choose a new password</h2>
+          {success ? (
+            <>
+              <div className="form-message">
+                <CheckCircle /> Password updated. Taking you to sign in…
+              </div>
+              <Link to="/login" className="button button-dark button-wide">
+                Sign in now <ArrowRight />
+              </Link>
+            </>
+          ) : (
+            <>
+              {!token && (
+                <div className="form-error">
+                  This reset link appears incomplete or was opened incorrectly.{" "}
+                  <Link to="/forgot-password">Request a new one</Link>
+                </div>
+              )}
+              <form
+                onSubmit={async (event) => {
+                  event.preventDefault()
+                  setError("")
+                  if (!token) {
+                    setError("This reset link is not valid.")
+                    return
+                  }
+                  if (password.length < 12) {
+                    setError("Passwords need at least 12 characters.")
+                    return
+                  }
+                  if (password !== confirm) {
+                    setError("The two passwords do not match.")
+                    return
+                  }
+                  setSubmitting(true)
+                  try {
+                    const response = await fetch("/api/auth/reset-password", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        token,
+                        password,
+                        confirmPassword: confirm,
+                      }),
+                    })
+                    const data = await response.json().catch(() => null)
+                    if (!response.ok) {
+                      setError(
+                        data?.error ?? "We could not reset your password.",
+                      )
+                      return
+                    }
+                    setSuccess(true)
+                    setTimeout(() => navigate("/login"), 1500)
+                  } catch {
+                    setError(
+                      "We could not reach the server. Check your connection and try again.",
+                    )
+                  } finally {
+                    setSubmitting(false)
+                  }
+                }}
+              >
+                <label>
+                  New password
+                  <div className="password-field">
+                    <input
+                      required
+                      minLength={12}
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="new-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="At least 12 characters"
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? <EyeOff /> : <Eye />}
+                    </button>
+                  </div>
+                </label>
+                <label>
+                  Confirm password
+                  <input
+                    required
+                    minLength={12}
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={confirm}
+                    onChange={(e) => setConfirm(e.target.value)}
+                    placeholder="Repeat your new password"
+                  />
+                </label>
+                {error && <div className="form-error">{error}</div>}
+                <button
+                  type="submit"
+                  className="button button-dark button-wide"
+                  disabled={submitting || !token}
+                >
+                  {submitting ? "Updating…" : "Reset password"} <ArrowRight />
+                </button>
+                <Link to="/login" className="inline-link">
+                  Remembered it? Back to sign in <ArrowRight />
+                </Link>
+              </form>
+            </>
+          )}
+        </div>
+      </section>
     </div>
   )
 }
@@ -12354,17 +12859,7 @@ export const router = createBrowserRouter([
         Component: NewArrivalsPage,
       },
       { path: "bulk-orders", Component: BookingPage },
-      {
-        path: "contact",
-        Component: () => (
-          <EditorialPage
-            slug="contact"
-            eyebrow="Here to help"
-            title="Speak with Henry's."
-            copy="For recommendations, order questions, delivery help or a custom event proposal, our Nairobi team is ready to help."
-          />
-        ),
-      },
+      { path: "contact", Component: ContactPage },
       {
         path: "about",
         Component: () => (
