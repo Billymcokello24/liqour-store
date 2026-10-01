@@ -1566,3 +1566,9 @@ a.contact-card:hover { border-color: var(--ink); }
 .password-toggle { width: 43px; min-height: 43px; display: grid; place-items: center; border: 1px solid var(--line); background: var(--paper); color: var(--muted); cursor: pointer; padding: 0; }
 .password-toggle svg { width: 15px; height: 15px; }
 .password-toggle:hover { border-color: var(--ink); color: var(--ink); }
+
+/* ACCOUNT ORDER + WISHLIST THUMBNAILS */
+.account-order-info { display: flex; flex-direction: row; align-items: center; gap: 12px; }
+.account-order-info > div { display: flex; flex-direction: column; gap: 4px; }
+.account-order-thumb { width: 46px; height: 46px; object-fit: cover; border: 1px solid var(--line); background: var(--soft); flex: none; }
+.account-order-info em { font-style: normal; font-size: 9px; color: var(--muted); }

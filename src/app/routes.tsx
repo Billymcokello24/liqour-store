@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import type { ImgHTMLAttributes } from "react"
 import {
   createBrowserRouter,
   Link,
@@ -837,7 +838,7 @@ function ProductCard({ product }: { product: Product }) {
         >
           <Heart />
         </button>
-        <img
+        <SafeImg
           src={product.image}
           alt={`${product.name} bottle`}
           loading="lazy"
@@ -942,7 +943,7 @@ function HomePage() {
     <>
       <section className="hero">
         {hero?.desktop_image_url ? (
-          <img src={hero.desktop_image_url} alt={hero.heading} />
+          <SafeImg src={hero.desktop_image_url} alt={hero.heading} />
         ) : (
           <div className="hero-fallback" aria-hidden="true" />
         )}
@@ -999,7 +1000,7 @@ function HomePage() {
                 to={`/shop?category=${encodeURIComponent(category.name)}`}
                 key={category.slug}
               >
-                <img
+                <SafeImg
                   src={category.image_url ?? PLACEHOLDER_IMAGE}
                   alt={`${category.name} collection`}
                 />
@@ -1040,7 +1041,7 @@ function HomePage() {
       <section className="editorial-banner">
         <div className="editorial-image">
           {editorial?.desktop_image_url ? (
-            <img
+            <SafeImg
               src={editorial.desktop_image_url}
               alt="A considered collection of premium spirits"
               loading="lazy"
@@ -1291,7 +1292,7 @@ function ShopPage() {
               <div className="product-list">
                 {filtered.map((product) => (
                   <div className="product-list-row" key={product.id}>
-                    <img src={product.image} alt={product.name} />
+                    <SafeImg src={product.image} alt={product.name} />
                     <div className="plr-info">
                       <strong>{product.name}</strong>
                       <small>{product.brand} · {product.volume} · {product.category}</small>
@@ -1486,7 +1487,7 @@ function ProductDetailPage() {
         <div className="detail-gallery">
           <div className="detail-image-main">
             {product.tag && <span className="product-tag">{product.tag}</span>}
-            <img
+            <SafeImg
               src={galleryImages[selectedImage] ?? product.image}
               alt={`${product.name} bottle`}
             />
@@ -1499,7 +1500,7 @@ function ProductDetailPage() {
                 className={i === selectedImage ? "thumb active" : "thumb"}
                 onClick={() => setSelectedImage(i)}
               >
-                <img src={src} alt="" />
+                <SafeImg src={src} alt="" />
               </button>
             ))}
           </div>
@@ -1858,7 +1859,7 @@ function CartPage() {
           <div className="cart-items">
             {cart.map((item) => (
               <article className="cart-item" key={item.id}>
-                <img src={item.image} alt={item.name} />
+                <SafeImg src={item.image} alt={item.name} />
                 <div className="cart-item-copy">
                   <span>{item.brand}</span>
                   <h3>{item.name}</h3>
@@ -2690,7 +2691,7 @@ function CheckoutPage() {
               <div className="review-items">
                 {cart.map((item) => (
                   <div key={item.id} className="review-item">
-                    <img src={item.image} alt={item.name} />
+                    <SafeImg src={item.image} alt={item.name} />
                     <div>
                       <strong>{item.name}</strong>
                       <span>
@@ -2730,7 +2731,7 @@ function CheckoutPage() {
             {cart.map((item) => (
               <div key={item.id} className="co-summary-item">
                 <div className="co-img-wrap">
-                  <img src={item.image} alt={item.name} />
+                  <SafeImg src={item.image} alt={item.name} />
                   <span>{item.quantity}</span>
                 </div>
                 <div>
@@ -3468,7 +3469,7 @@ function OrderTrackingPage() {
               <div className="track-item-list">
                 {result.order.items.map((item, i) => (
                   <div className="track-item" key={`${item.name}-${i}`}>
-                    <img src={item.image ?? PLACEHOLDER_IMAGE} alt="" />
+                    <SafeImg src={item.image ?? PLACEHOLDER_IMAGE} alt="" />
                     <div className="track-item-info">
                       <strong>{item.name}</strong>
                       <span>
@@ -3735,6 +3736,27 @@ type CmsPageBody = {
   eyebrow?: string
   copy?: string
   sections?: CmsSection[]
+}
+
+function SafeImg({
+  src,
+  alt,
+  ...rest
+}: ImgHTMLAttributes<HTMLImageElement>) {
+  return (
+    <img
+      src={src}
+      alt={alt ?? ""}
+      onError={(event) => {
+        const element = event.currentTarget
+        if (element.dataset.fallback !== "1") {
+          element.dataset.fallback = "1"
+          element.src = PLACEHOLDER_IMAGE
+        }
+      }}
+      {...rest}
+    />
+  )
 }
 
 function EditorialPage({
@@ -4312,6 +4334,7 @@ function AccountPage() {
       customer_note: string | null
       total_kes: number
       placed_at: string
+      first_item: { name?: string; image?: string }
     }[]
     bookings: {
       booking_number: string
@@ -4643,11 +4666,19 @@ function AccountPage() {
       const variant = item.variants[0]
       return (
         <div className="account-order" key={item.id}>
-          <div>
-            <strong>{item.name}</strong>
-            <span>
-              {item.brand} · {variant ? `${variant.volumeMl}ml` : ""}
-            </span>
+          <div className="account-order-info">
+            <SafeImg
+              className="account-order-thumb"
+              src={item.primary_image ?? PLACEHOLDER_IMAGE}
+              alt={item.name}
+              loading="lazy"
+            />
+            <div>
+              <strong>{item.name}</strong>
+              <span>
+                {item.brand} · {variant ? `${variant.volumeMl}ml` : ""}
+              </span>
+            </div>
           </div>
           <strong>{variant ? formatPrice(variant.priceKes) : ""}</strong>
           <Link to={`/products/${item.id}`}>View</Link>
@@ -4975,16 +5006,25 @@ function AccountPage() {
           const editable = EDITABLE_ORDER_STATUSES.includes(order.status)
           return (
             <div className="account-order" key={order.order_number}>
-              <div>
-                <strong>{order.order_number}</strong>
-                <span>
-                  Placed{" "}
-                  {new Date(order.placed_at).toLocaleDateString("en-KE", {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </span>
+              <div className="account-order-info">
+                <SafeImg
+                  className="account-order-thumb"
+                  src={order.first_item?.image ?? PLACEHOLDER_IMAGE}
+                  alt={order.first_item?.name ?? "Order item"}
+                  loading="lazy"
+                />
+                <div>
+                  <strong>{order.order_number}</strong>
+                  {order.first_item?.name && <em>{order.first_item.name}</em>}
+                  <span>
+                    Placed{" "}
+                    {new Date(order.placed_at).toLocaleDateString("en-KE", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </span>
+                </div>
               </div>
               <span className={`status status-${order.status.replace(/_/g, "-")}`}>
                 {order.status.replace(/_/g, " ")}
@@ -5984,7 +6024,7 @@ function ImagePicker({
     <div className="image-picker">
       <div className="image-picker-preview">
         {value ? (
-          <img src={value} alt="Selected" />
+          <SafeImg src={value} alt="Selected" />
         ) : (
           <span>No image selected</span>
         )}
@@ -6030,7 +6070,7 @@ function ImagePicker({
                   onPick({ id: asset.id, url: asset.public_url })
                 }
               >
-                <img src={asset.public_url} alt={asset.alt_text ?? ""} />
+                <SafeImg src={asset.public_url} alt={asset.alt_text ?? ""} />
               </button>
             ))
           )}
@@ -6226,7 +6266,7 @@ function AdminCategories() {
               <article key={category.id} className="admin-entity-card">
                 <div className="admin-entity-image">
                   {category.image_url ? (
-                    <img src={category.image_url} alt={category.name} />
+                    <SafeImg src={category.image_url} alt={category.name} />
                   ) : (
                     <Package />
                   )}
@@ -6587,7 +6627,7 @@ function AdminBrands() {
               <article key={brand.id} className="admin-entity-card">
                 <div className="admin-entity-image">
                   {brand.image_url ? (
-                    <img src={brand.image_url} alt={brand.name} />
+                    <SafeImg src={brand.image_url} alt={brand.name} />
                   ) : (
                     <Star />
                   )}
@@ -7581,7 +7621,7 @@ function AdminProducts({
                   aria-label={`View ${row.name} in the store`}
                 >
                   {row.primary_image ? (
-                    <img src={row.primary_image} alt={row.name} />
+                    <SafeImg src={row.primary_image} alt={row.name} />
                   ) : (
                     <Package />
                   )}
@@ -7629,7 +7669,7 @@ function AdminProducts({
                   <tr key={row.id}>
                     <td>
                       <div className="table-product">
-                        <img src={row.primary_image ?? ""} alt="" />
+                        <SafeImg src={row.primary_image ?? ""} alt="" />
                         <div>
                           <strong>{row.name}</strong>
                           <span>
@@ -8134,7 +8174,7 @@ function AdminOrders() {
                           key={item.id}
                           className={`dispatch-item ${on ? "" : "off"}`}
                         >
-                          <img
+                          <SafeImg
                             src={item.image ?? PLACEHOLDER_IMAGE}
                             alt=""
                           />
@@ -8586,7 +8626,7 @@ function AdminInventory() {
                   <tr key={variant.id || row.id}>
                     <td>
                       <div className="table-product">
-                        <img src={row.primary_image ?? ""} alt="" />
+                        <SafeImg src={row.primary_image ?? ""} alt="" />
                         <div>
                           <strong>{row.name}</strong>
                           <span>
@@ -11582,7 +11622,7 @@ function AdminBanners() {
             {banners.map((banner) => (
               <article key={banner.id} className="admin-entity-card">
                 <div className="admin-entity-image">
-                  <img src={banner.desktop_image_url} alt={banner.heading} />
+                  <SafeImg src={banner.desktop_image_url} alt={banner.heading} />
                 </div>
                 <div className="admin-entity-body">
                   <strong>{banner.heading}</strong>
@@ -11607,7 +11647,7 @@ function AdminBanners() {
           <div className="banner-admin-list">
             {banners.map((banner) => (
               <article key={banner.id} className="banner-admin-item">
-                <img src={banner.desktop_image_url} alt="" />
+                <SafeImg src={banner.desktop_image_url} alt="" />
                 <div>
                   <strong>{banner.heading}</strong>
                   <small>{banner.body ?? "No supporting copy"}</small>
@@ -12225,7 +12265,7 @@ function CollectionsIndexPage() {
               to={`/collections/${collection.slug}`}
               className="category-card"
             >
-              <img
+              <SafeImg
                 src={collection.image_url ?? PLACEHOLDER_IMAGE}
                 alt={collection.name}
                 loading="lazy"
@@ -12337,7 +12377,7 @@ function CategoriesIndexPage() {
               to={`/categories/${category.slug}`}
               className="category-card"
             >
-              <img
+              <SafeImg
                 src={category.image_url ?? PLACEHOLDER_IMAGE}
                 alt={category.name}
                 loading="lazy"
@@ -12486,7 +12526,7 @@ function BrandsIndexPage() {
               to={`/brands/${brand.slug}`}
               className="category-card"
             >
-              <img
+              <SafeImg
                 src={brand.image_url ?? brand.logo_url ?? PLACEHOLDER_IMAGE}
                 alt={brand.name}
                 loading="lazy"
@@ -12506,7 +12546,7 @@ function BrandsIndexPage() {
               to={`/brands/${brand.slug}`}
               className="brand-list-row"
             >
-              <img
+              <SafeImg
                 src={brand.logo_url ?? brand.image_url ?? PLACEHOLDER_IMAGE}
                 alt=""
                 loading="lazy"
