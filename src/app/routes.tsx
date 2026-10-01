@@ -2832,34 +2832,268 @@ const trackStepLabels: Record<string, { label: string; desc: string }> = {
   },
 }
 
+const paymentStatusLabels: Record<string, string> = {
+  pending: "Awaiting payment",
+  paid: "Paid",
+  refunded: "Refunded",
+  failed: "Payment failed",
+}
+
+// ─── PRINTABLE RECEIPT ────────────────────────────────────────────────────────
+
+type ReceiptData = {
+  orderNumber: string
+  placedAt: string
+  closedAt?: string | null
+  customerName: string
+  customerPhone?: string | null
+  addressLine?: string | null
+  deliveryType: string
+  items: Array<{
+    name: string
+    quantity: number
+    unitPriceKes: number
+    fulfilment?: string
+  }>
+  subtotalKes: number
+  discountKes: number
+  deliveryFeeKes: number
+  totalKes: number
+  paymentMethod: string
+  paymentStatus: string
+}
+
+function escReceipt(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+}
+
+function receiptDate(iso: string) {
+  return new Date(iso).toLocaleString("en-KE", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
+function buildReceiptHtml(data: ReceiptData) {
+  const money = (n: number) => `KES ${n.toLocaleString("en-KE")}`
+  const itemRows = data.items
+    .map(
+      (item) => `
+        <tr>
+          <td class="qty">${item.quantity} x</td>
+          <td>${escReceipt(item.name)}${
+            item.fulfilment === "excluded"
+              ? '<br><span class="excl">NOT DELIVERED</span>'
+              : ""
+          }</td>
+          <td class="num">${money(item.unitPriceKes * item.quantity)}</td>
+        </tr>`,
+    )
+    .join("")
+  const discountRow =
+    data.discountKes > 0
+      ? `<div class="tot"><span>Discount</span><span>-${money(data.discountKes)}</span></div>`
+      : ""
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Receipt ${escReceipt(data.orderNumber)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #f4f2ec;
+    font-family: "Courier New", Courier, monospace;
+    color: #1c1a17;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 12px;
+  }
+  .btn {
+    width: 320px;
+    margin: 0 0 18px;
+    padding: 10px;
+    font: inherit;
+    cursor: pointer;
+    background: #1c1a17;
+    color: #fff;
+    border: none;
+    letter-spacing: 1px;
+  }
+  .sheet {
+    width: 320px;
+    background: #fff;
+    padding: 22px 18px 26px;
+    box-shadow: 0 8px 28px rgba(28, 26, 23, 0.14);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .brand { text-align: center; }
+  .brand h1 { font-size: 17px; margin: 0; letter-spacing: 2px; }
+  .brand p { margin: 2px 0 0; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+  .cut { border: none; border-top: 1px dashed #b9b2a4; margin: 12px 0; }
+  .kv { display: flex; justify-content: space-between; gap: 8px; }
+  .kv span:first-child { text-transform: uppercase; font-size: 10px; }
+  .center { text-align: center; text-transform: uppercase; letter-spacing: 1px; font-size: 11px; margin: 6px 0; }
+  table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  td { padding: 3px 0; vertical-align: top; }
+  .qty { width: 34px; white-space: nowrap; }
+  .num { text-align: right; white-space: nowrap; }
+  .excl { color: #8f1d22; font-weight: bold; font-size: 10px; letter-spacing: 1px; }
+  .totals { margin-top: 6px; }
+  .tot { display: flex; justify-content: space-between; }
+  .grand { border-top: 1px dashed #b9b2a4; margin-top: 6px; padding-top: 6px; font-weight: bold; }
+  .pay { margin-top: 10px; }
+  .bar { text-align: center; letter-spacing: 3px; margin-top: 14px; font-size: 16px; }
+  .thanks { text-align: center; margin-top: 8px; font-size: 11px; }
+  .fine { text-align: center; margin-top: 10px; font-size: 9.5px; color: #55504a; }
+  @media print {
+    body { background: #fff; padding: 0; }
+    .btn { display: none; }
+    .sheet { box-shadow: none; width: 76mm; }
+  }
+</style>
+</head>
+<body>
+  <button class="btn" onclick="window.print()">Print receipt</button>
+  <div class="sheet">
+    <div class="brand">
+      <h1>HENRY'S LIQUOR HUB</h1>
+      <p>Order Receipt</p>
+    </div>
+    <hr class="cut" />
+    <div class="kv"><span>Receipt No</span><strong>${escReceipt(data.orderNumber)}</strong></div>
+    <div class="kv"><span>Placed</span><span>${escReceipt(receiptDate(data.placedAt))}</span></div>
+    ${
+      data.closedAt
+        ? `<div class="kv"><span>Delivered</span><span>${escReceipt(receiptDate(data.closedAt))}</span></div>`
+        : ""
+    }
+    <div class="kv"><span>Customer</span><span>${escReceipt(data.customerName || "Customer")}</span></div>
+    ${
+      data.customerPhone
+        ? `<div class="kv"><span>Phone</span><span>${escReceipt(data.customerPhone)}</span></div>`
+        : ""
+    }
+    ${
+      data.addressLine
+        ? `<div class="kv"><span>${data.deliveryType === "pickup" ? "Collection" : "Delivered to"}</span><span>${escReceipt(data.addressLine)}</span></div>`
+        : ""
+    }
+    <hr class="cut" />
+    <div class="center">Items</div>
+    <table>
+      <tbody>${itemRows}</tbody>
+    </table>
+    <hr class="cut" />
+    <div class="totals">
+      <div class="tot"><span>Subtotal</span><span>${money(data.subtotalKes)}</span></div>
+      ${discountRow}
+      <div class="tot">
+        <span>Delivery</span>
+        <span>${data.deliveryFeeKes === 0 ? "FREE" : money(data.deliveryFeeKes)}</span>
+      </div>
+      <div class="tot grand"><span>TOTAL</span><span>${money(data.totalKes)}</span></div>
+    </div>
+    <div class="pay">
+      <div class="kv"><span>Payment</span><span>${escReceipt(PAYMENT_LABELS[data.paymentMethod] ?? data.paymentMethod)}</span></div>
+      <div class="kv"><span>Status</span><span>${escReceipt((paymentStatusLabels[data.paymentStatus] ?? data.paymentStatus).toUpperCase())}</span></div>
+    </div>
+    <div class="bar">||| || ||| | |||| ||| || |||</div>
+    <div class="thanks">Thank you for shopping with Henry's Liquor Hub.</div>
+    <div class="fine">
+      Goods sold are for personal consumption. Excluded by law from sale to
+      persons under 18 years. Retain this receipt for any refund or exchange.
+      ${
+        data.items.some((item) => item.fulfilment === "excluded")
+          ? " Items marked NOT DELIVERED will be refunded or rearranged — our team will call you."
+          : ""
+      }
+    </div>
+  </div>
+</body>
+</html>`
+}
+
+function printReceipt(data: ReceiptData) {
+  const win = window.open("", "_blank", "width=400,height=760")
+  if (!win) return
+  win.document.open()
+  win.document.write(buildReceiptHtml(data))
+  win.document.close()
+  win.focus()
+}
+
+type TrackRecentOrder = {
+  order_number: string
+  status: string
+  total_kes: number
+  item_count: number
+  placed_at: string
+}
+
 function OrderTrackingPage() {
   const { lastOrder } = useStore()
-  const [orderNumber, setOrderNumber] = useState(lastOrder?.id ?? "")
+  const orderParam =
+    new URLSearchParams(useLocation().search).get("order") ?? ""
+  const autoLookupDone = useRef(false)
+  const [orderNumber, setOrderNumber] = useState(orderParam || lastOrder?.id || "")
   const [contact, setContact] = useState(lastOrder?.customer.email ?? "")
   const [result, setResult] = useState<{
     order: {
       order_number: string
       status: string
       payment_status: string
+      payment_method: string
       delivery_type: string
+      subtotal_kes: number
+      discount_kes: number
+      delivery_fee_kes: number
       total_kes: number
       placed_at: string
+      updated_at: string
       item_count: number
-      items: Array<{ name: string; quantity: number; image: string | null }>
+      customer_name: string
+      delivery_address: {
+        name?: string
+        phone?: string
+        email?: string
+        address?: string
+        area?: string
+      } | null
+      items: Array<{
+        name: string
+        quantity: number
+        unitPriceKes: number
+        image: string | null
+        fulfilment: string
+      }>
     }
     timeline: Array<{ step: string; reached: boolean }>
   } | null>(null)
   const [error, setError] = useState("")
   const [isSearching, setIsSearching] = useState(false)
+  const [recentOrders, setRecentOrders] = useState<TrackRecentOrder[]>([])
 
-  async function lookup(event: React.FormEvent) {
-    event.preventDefault()
+  async function runLookup(num: string, contactValue: string) {
+    const orderTrimmed = num.trim()
+    const contactTrimmed = contactValue.trim()
+    if (!orderTrimmed || !contactTrimmed) return
     setIsSearching(true)
     setError("")
     setResult(null)
     try {
       const response = await fetch(
-        `/api/orders/track?orderNumber=${encodeURIComponent(orderNumber.trim())}&contact=${encodeURIComponent(contact.trim().toLowerCase())}`,
+        `/api/orders/track?orderNumber=${encodeURIComponent(orderTrimmed)}&contact=${encodeURIComponent(contactTrimmed.toLowerCase())}`,
       )
       const data = await response.json().catch(() => null)
       if (!response.ok) {
@@ -2874,14 +3108,55 @@ function OrderTrackingPage() {
     }
   }
 
+  useEffect(() => {
+    const claims = getSessionClaims()
+    if (!claims || claims.role !== "customer") return
+    let cancelled = false
+    fetch("/api/auth/me", { headers: authHeaders() })
+      .then((response) => (response.ok ? response.json() : Promise.reject()))
+      .then((data: { user?: { email?: string } }) => {
+        if (cancelled) return
+        const email = data?.user?.email ?? ""
+        if (!email) return
+        setContact((current) => current || email)
+        if (orderParam && !autoLookupDone.current) {
+          autoLookupDone.current = true
+          void runLookup(orderParam, email)
+        }
+      })
+      .catch(() => undefined)
+    fetch("/api/orders", { headers: authHeaders() })
+      .then((response) => (response.ok ? response.json() : Promise.reject()))
+      .then((data: { orders?: TrackRecentOrder[] }) => {
+        if (!cancelled) setRecentOrders((data?.orders ?? []).slice(0, 5))
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const terminal =
     result?.order.status === "cancelled" || result?.order.status === "refunded"
 
   return (
     <div className="page-wrap track-page">
-      <span className="eyebrow">Henry's Liquor Hub</span>
-      <h1>Track your order</h1>
-      <form className="track-form" onSubmit={lookup}>
+      <div className="track-intro">
+        <span className="eyebrow">Henry's Liquor Hub</span>
+        <h1>Track your order</h1>
+        <p>
+          Enter the order number from your confirmation message with the email
+          or phone you checked out with, and we will show exactly where your
+          bottles are.
+        </p>
+      </div>
+      <form
+        className="track-form"
+        onSubmit={(event) => {
+          event.preventDefault()
+          void runLookup(orderNumber, contact)
+        }}
+      >
         <label>
           Order number
           <input
@@ -2904,30 +3179,116 @@ function OrderTrackingPage() {
           {isSearching ? "Searching…" : "Track order"}
         </button>
       </form>
+      {recentOrders.length > 0 && (
+        <div className="track-recent">
+          <span className="eyebrow">Your recent orders</span>
+          <div className="track-recent-list">
+            {recentOrders.map((recent) => (
+              <button
+                key={recent.order_number}
+                type="button"
+                className="track-recent-chip"
+                onClick={() => {
+                  setOrderNumber(recent.order_number)
+                  void runLookup(recent.order_number, contact)
+                }}
+              >
+                <strong>#{recent.order_number}</strong>
+                <span>
+                  {trackStepLabels[recent.status]?.label ??
+                    recent.status.replace(/_/g, " ")}
+                </span>
+                <span>{formatPrice(recent.total_kes)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {error && <div className="form-error">{error}</div>}
       {result && (
         <>
-          <div className="track-header">
-            <div>
-              <span>Order</span>
-              <strong>#{result.order.order_number}</strong>
-            </div>
-            <div>
-              <span>Status</span>
-              <strong>
+          <div className="track-hero">
+            <div className="track-hero-main">
+              <span className="eyebrow">
+                Order #{result.order.order_number}
+              </span>
+              <h2>
                 {terminal
-                  ? result.order.status.replace(/_/g, " ")
+                  ? `This order was ${result.order.status.replace(/_/g, " ")}`
                   : (trackStepLabels[result.order.status]?.label ??
                     result.order.status.replace(/_/g, " "))}
-              </strong>
+              </h2>
+              <p>
+                {terminal
+                  ? "Contact our support team from your account if you need help."
+                  : (trackStepLabels[result.order.status]?.desc ??
+                    "We are working on your order.")}
+              </p>
+              <div className="track-hero-meta">
+                <span>
+                  <Clock />
+                  Placed{" "}
+                  {new Date(result.order.placed_at).toLocaleDateString("en-KE", {
+                    day: "numeric",
+                    month: "short",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+                <span>
+                  <Truck />
+                  {result.order.delivery_type === "pickup"
+                    ? "Collection order"
+                    : "Doorstep delivery"}
+                </span>
+                <span>
+                  <Banknote />
+                  {paymentStatusLabels[result.order.payment_status] ??
+                    result.order.payment_status}
+                </span>
+              </div>
+              {result.order.status === "delivered" && (
+                <button
+                  type="button"
+                  className="button button-dark track-print-btn"
+                  onClick={() =>
+                    printReceipt({
+                      orderNumber: result.order.order_number,
+                      placedAt: result.order.placed_at,
+                      closedAt: result.order.updated_at,
+                      customerName: result.order.customer_name,
+                      customerPhone:
+                        result.order.delivery_address?.phone ?? null,
+                      addressLine:
+                        [
+                          result.order.delivery_address?.address,
+                          result.order.delivery_address?.area,
+                        ]
+                          .filter(Boolean)
+                          .join(", ") || null,
+                      deliveryType: result.order.delivery_type,
+                      items: result.order.items,
+                      subtotalKes: result.order.subtotal_kes,
+                      discountKes: result.order.discount_kes,
+                      deliveryFeeKes: result.order.delivery_fee_kes,
+                      totalKes: result.order.total_kes,
+                      paymentMethod: result.order.payment_method,
+                      paymentStatus: result.order.payment_status,
+                    })
+                  }
+                >
+                  <Download />
+                  Print your receipt
+                </button>
+              )}
             </div>
-            <div>
-              <span>Total</span>
+            <div className="track-hero-total">
+              <span>Order total</span>
               <strong>{formatPrice(result.order.total_kes)}</strong>
-            </div>
-            <div>
-              <span>Items</span>
-              <strong>{result.order.item_count}</strong>
+              <em>
+                {result.order.item_count}{" "}
+                {result.order.item_count === 1 ? "bottle" : "bottles"}
+              </em>
             </div>
           </div>
           {terminal ? (
@@ -2982,19 +3343,94 @@ function OrderTrackingPage() {
               })}
             </div>
           )}
-          {result.order.items.length > 0 && (
-            <div className="account-card">
-              <span className="eyebrow">Bottles</span>
-              {result.order.items.map((item, i) => (
-                <div className="account-order" key={`${item.name}-${i}`}>
-                  <div>
-                    <strong>{item.name}</strong>
-                    <span>Qty {item.quantity}</span>
-                  </div>
-                </div>
-              ))}
+          <div className="track-cards">
+            <div className="track-card">
+              <h3>
+                <Truck />
+                {result.order.delivery_type === "pickup"
+                  ? "Collection details"
+                  : "Delivery details"}
+              </h3>
+              {result.order.delivery_type === "pickup" ? (
+                <p className="track-card-line">
+                  This order is ready for pickup at our store. Our team will
+                  call{" "}
+                  <strong>
+                    {result.order.delivery_address?.phone ??
+                      "the number on the order"}
+                  </strong>{" "}
+                  when it is packed.
+                </p>
+              ) : (
+                <>
+                  <p className="track-card-line">
+                    <MapPin />
+                    <span>
+                      <strong>
+                        {result.order.delivery_address?.address ??
+                          "Address to be confirmed with the rider"}
+                      </strong>
+                      {result.order.delivery_address?.area
+                        ? `, ${result.order.delivery_address.area}`
+                        : ""}
+                    </span>
+                  </p>
+                  <p className="track-card-line">
+                    <Phone />
+                    <span>
+                      {result.order.delivery_address?.phone ??
+                        "No phone recorded on the order"}
+                    </span>
+                  </p>
+                </>
+              )}
+              <p className="track-card-line muted">
+                <CreditCard />
+                <span>
+                  {PAYMENT_LABELS[result.order.payment_method] ??
+                    result.order.payment_method}{" "}
+                  —{" "}
+                  {paymentStatusLabels[result.order.payment_status] ??
+                    result.order.payment_status}
+                </span>
+              </p>
             </div>
-          )}
+            <div className="track-card">
+              <h3>
+                <Package />
+                Bottles in this order
+              </h3>
+              <div className="track-item-list">
+                {result.order.items.map((item, i) => (
+                  <div className="track-item" key={`${item.name}-${i}`}>
+                    <img src={item.image ?? PLACEHOLDER_IMAGE} alt="" />
+                    <div className="track-item-info">
+                      <strong>{item.name}</strong>
+                      <span>
+                        Qty {item.quantity} · {formatPrice(item.unitPriceKes)}{" "}
+                        each
+                      </span>
+                    </div>
+                    {item.fulfilment === "delivering" && (
+                      <span className="track-badge tb-delivering">
+                        On the way
+                      </span>
+                    )}
+                    {item.fulfilment === "excluded" && (
+                      <span className="track-badge tb-excluded">
+                        Not delivered
+                      </span>
+                    )}
+                  </div>
+                ))}
+                {!result.order.items.length && (
+                  <p className="track-card-line muted">
+                    Item details will appear here shortly.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
         </>
       )}
       {!result && !error && !lastOrder && (
@@ -6868,6 +7304,46 @@ type AdminOrderRecord = {
   customer_phone: string | null
 }
 
+type AdminOrderItem = {
+  id: string
+  name: string
+  quantity: number
+  unitPriceKes: number
+  image: string | null
+  fulfilment: "pending" | "delivering" | "excluded"
+}
+
+const PAYMENT_LABELS: Record<string, string> = {
+  mpesa: "M-Pesa",
+  card: "Card",
+  bank: "Bank transfer",
+  cash: "Pay on delivery",
+}
+
+type AdminOrderDetail = {
+  order_number: string
+  status: string
+  payment_method: string
+  payment_status: string
+  delivery_type: string
+  subtotal_kes: number
+  discount_kes: number
+  delivery_fee_kes: number
+  total_kes: number
+  placed_at: string
+  updated_at: string
+  customer_name: string
+  customer_email: string | null
+  customer_phone: string | null
+  delivery_address: {
+    name?: string
+    phone?: string
+    address?: string
+    area?: string
+  } | null
+  items: AdminOrderItem[]
+}
+
 function AdminOrders() {
   const { orders: localOrders } = useStore()
   const [orders, setOrders] = useState<Order[]>(localOrders)
@@ -6875,6 +7351,12 @@ function AdminOrders() {
   const [selected, setSelected] = useState<Order | null>(null)
   const [updating, setUpdating] = useState<string | null>(null)
   const [error, setError] = useState("")
+  const [detailOrder, setDetailOrder] = useState<AdminOrderDetail | null>(null)
+  const [detailItems, setDetailItems] = useState<AdminOrderItem[]>([])
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState("")
+  const [delivering, setDelivering] = useState(false)
+  const [deliverNotice, setDeliverNotice] = useState("")
   const statusFilters = [
     "All",
     "confirmed",
@@ -6952,6 +7434,133 @@ function AdminOrders() {
         ),
       )
   }, [])
+
+  useEffect(() => {
+    setDetailItems([])
+    setDetailOrder(null)
+    setDetailError("")
+    setDeliverNotice("")
+    const adminId = selected?.adminId
+    if (!adminId) return
+    const session = sessionStorage.getItem("henrys-session")
+    if (!session) return
+    let cancelled = false
+    setDetailLoading(true)
+    fetch(`/api/admin/orders/${adminId}`, {
+      headers: { Authorization: `Bearer ${session}` },
+    })
+      .then(async (response) => {
+        const data = (await response.json()) as {
+          order?: AdminOrderDetail
+          error?: string
+        }
+        if (!response.ok)
+          throw new Error(data.error ?? "We could not load this order.")
+        return data.order ?? null
+      })
+      .then((order) => {
+        if (cancelled || !order) return
+        setDetailOrder(order)
+        setDetailItems(order.items)
+      })
+      .catch((loadError: unknown) => {
+        if (!cancelled)
+          setDetailError(
+            loadError instanceof Error
+              ? loadError.message
+              : "We could not load this order.",
+          )
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selected?.adminId])
+
+  function toggleItem(itemId: string, on: boolean) {
+    setDetailItems((current) =>
+      current.map((item) =>
+        item.id === itemId
+          ? { ...item, fulfilment: on ? "delivering" : "excluded" }
+          : item,
+      ),
+    )
+  }
+
+  async function dispatchOrder() {
+    const session = sessionStorage.getItem("henrys-session")
+    if (!session || !selected?.adminId) {
+      setError("Sign in with a staff account to dispatch orders.")
+      return
+    }
+    if (!detailItems.length) {
+      setError("Load the order products before dispatching.")
+      return
+    }
+    if (!detailItems.some((item) => item.fulfilment !== "excluded")) {
+      setError("Tick at least one product that is being delivered.")
+      return
+    }
+    setDelivering(true)
+    setError("")
+    setDeliverNotice("")
+    try {
+      const response = await fetch(
+        `/api/admin/orders/${selected.adminId}/deliver`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${session}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            items: detailItems.map((item) => ({
+              id: item.id,
+              delivering: item.fulfilment !== "excluded",
+            })),
+          }),
+        },
+      )
+      const data = (await response.json().catch(() => null)) as {
+        error?: string
+        delivering?: string[]
+        excluded?: string[]
+      } | null
+      if (!response.ok)
+        throw new Error(data?.error ?? "We could not dispatch this order.")
+      setOrders((current) =>
+        current.map((order) =>
+          order.id === selected.id
+            ? { ...order, status: "out-for-delivery" as const }
+            : order,
+        ),
+      )
+      setSelected((current) =>
+        current?.id === selected.id
+          ? { ...current, status: "out-for-delivery" as const }
+          : current,
+      )
+      setDetailOrder((current) =>
+        current ? { ...current, status: "out_for_delivery" } : current,
+      )
+      const excluded = data?.excluded ?? []
+      setDeliverNotice(
+        excluded.length
+          ? `Dispatched. The customer was notified: ${detailItems.length - excluded.length} of ${detailItems.length} products on the way; not delivered: ${excluded.join(", ")}.`
+          : `Dispatched. The customer was notified that all ${detailItems.length} products are on the way.`,
+      )
+    } catch (dispatchError) {
+      setError(
+        dispatchError instanceof Error
+          ? dispatchError.message
+          : "We could not dispatch this order.",
+      )
+    } finally {
+      setDelivering(false)
+    }
+  }
 
   async function updateStatus(order: Order, newStatus: Order["status"]) {
     const session = sessionStorage.getItem("henrys-session")
@@ -7056,7 +7665,9 @@ function AdminOrders() {
                     <td>{order.customer.area}</td>
                     <td>{formatPrice(order.total)}</td>
                     <td>
-                      <span className="pay-badge">{order.payment}</span>
+                      <span className="pay-badge">
+                        {PAYMENT_LABELS[order.payment] ?? order.payment}
+                      </span>
                     </td>
                     <td>
                       <span className={`status status-${order.status}`}>
@@ -7130,6 +7741,78 @@ function AdminOrders() {
                 </div>
               </div>
               <div className="drawer-section">
+                <h3>Ordered products</h3>
+                {detailError && <p className="form-error">{detailError}</p>}
+                {detailLoading && (
+                  <p className="drawer-muted">Loading products…</p>
+                )}
+                {!detailLoading && !detailError && !detailItems.length && (
+                  <p className="drawer-muted">
+                    No product line was recorded for this order.
+                  </p>
+                )}
+                {!detailLoading && detailItems.length > 0 && (
+                  <div className="dispatch-items">
+                    {detailItems.map((item) => {
+                      const on = item.fulfilment !== "excluded"
+                      return (
+                        <div
+                          key={item.id}
+                          className={`dispatch-item ${on ? "" : "off"}`}
+                        >
+                          <img
+                            src={item.image ?? PLACEHOLDER_IMAGE}
+                            alt=""
+                          />
+                          <div className="dispatch-info">
+                            <strong>{item.name}</strong>
+                            <span>
+                              Qty {item.quantity} ·{" "}
+                              {formatPrice(item.unitPriceKes)}
+                            </span>
+                          </div>
+                          <div className="dispatch-toggle">
+                            <button
+                              type="button"
+                              className={on ? "active" : ""}
+                              title="Being delivered"
+                              onClick={() => toggleItem(item.id, true)}
+                            >
+                              <Check />
+                            </button>
+                            <button
+                              type="button"
+                              className={on ? "" : "active"}
+                              title="Not delivered / unavailable"
+                              onClick={() => toggleItem(item.id, false)}
+                            >
+                              <X />
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                {deliverNotice && (
+                  <p className="dispatch-notice">{deliverNotice}</p>
+                )}
+                <button
+                  type="button"
+                  className="button button-dark button-wide dispatch-btn"
+                  disabled={
+                    delivering ||
+                    detailLoading ||
+                    detailItems.length === 0
+                  }
+                  onClick={dispatchOrder}
+                >
+                  {delivering
+                    ? "Dispatching…"
+                    : "Deliver order & notify customer"}
+                </button>
+              </div>
+              <div className="drawer-section">
                 <h3>Update status</h3>
                 <div className="status-update-grid">
                   {([
@@ -7172,7 +7855,9 @@ function AdminOrders() {
                   </div>
                   <div>
                     <span>Payment</span>
-                    <span>{selected.payment}</span>
+                    <span>
+                      {PAYMENT_LABELS[selected.payment] ?? selected.payment}
+                    </span>
                   </div>
                   <div className="drawer-total">
                     <span>Total</span>
@@ -7184,6 +7869,37 @@ function AdminOrders() {
                 <button
                   type="button"
                   className="button button-dark button-wide"
+                  disabled={!detailOrder}
+                  onClick={() => {
+                    if (!detailOrder) return
+                    printReceipt({
+                      orderNumber: detailOrder.order_number,
+                      placedAt: detailOrder.placed_at,
+                      closedAt:
+                        detailOrder.status === "delivered"
+                          ? detailOrder.updated_at
+                          : null,
+                      customerName: detailOrder.customer_name,
+                      customerPhone:
+                        detailOrder.delivery_address?.phone ??
+                        detailOrder.customer_phone,
+                      addressLine:
+                        [
+                          detailOrder.delivery_address?.address,
+                          detailOrder.delivery_address?.area,
+                        ]
+                          .filter(Boolean)
+                          .join(", ") || null,
+                      deliveryType: detailOrder.delivery_type,
+                      items: detailItems,
+                      subtotalKes: detailOrder.subtotal_kes,
+                      discountKes: detailOrder.discount_kes,
+                      deliveryFeeKes: detailOrder.delivery_fee_kes,
+                      totalKes: detailOrder.total_kes,
+                      paymentMethod: detailOrder.payment_method,
+                      paymentStatus: detailOrder.payment_status,
+                    })
+                  }}
                 >
                   Print receipt
                 </button>

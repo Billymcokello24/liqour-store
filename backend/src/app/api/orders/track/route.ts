@@ -13,11 +13,14 @@ export async function GET(request: NextRequest) {
     }
     const result = await query(
       `SELECT o.order_number, o.status, o.payment_status, o.payment_method, o.delivery_type,
+         o.subtotal_kes, o.discount_kes, o.delivery_fee_kes,
          o.total_kes, o.placed_at, o.updated_at, o.delivery_address,
+         concat(u.first_name, ' ', u.last_name) AS customer_name,
          (SELECT count(*)::int FROM order_items oi WHERE oi.order_id = o.id) AS item_count,
          (SELECT coalesce(json_agg(json_build_object(
             'name', oi.product_snapshot->>'name', 'quantity', oi.quantity,
-            'unitPriceKes', oi.unit_price_kes, 'image', oi.image_snapshot_url)), '[]'::json)
+            'unitPriceKes', oi.unit_price_kes, 'image', oi.image_snapshot_url,
+            'fulfilment', oi.fulfilment)), '[]'::json)
           FROM order_items oi WHERE oi.order_id = o.id) AS items
        FROM orders o
        JOIN users u ON u.id = o.customer_id

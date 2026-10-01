@@ -8,6 +8,43 @@ const statusInput = z.object({
   status: z.enum(["confirmed", "preparing", "out_for_delivery", "delivered", "cancelled"]),
 });
 
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ orderId: string }> },
+) {
+  try {
+    await requireSession(request, ["super_admin", "manager", "sales", "delivery"]);
+    const { orderId } = await context.params;
+    const result = await query(
+      `SELECT o.id, o.order_number, o.status, o.payment_method, o.payment_status, o.delivery_type,
+              o.delivery_address, o.customer_note, o.subtotal_kes, o.discount_kes, o.delivery_fee_kes,
+              o.total_kes, o.placed_at, o.updated_at,
+              concat(u.first_name, ' ', u.last_name) AS customer_name,
+              u.email AS customer_email, u.phone AS customer_phone,
+              COALESCE((
+                SELECT json_agg(json_build_object(
+                  'id', oi.id,
+                  'name', oi.product_snapshot->>'name',
+                  'quantity', oi.quantity,
+                  'unitPriceKes', oi.unit_price_kes,
+                  'image', oi.image_snapshot_url,
+                  'fulfilment', oi.fulfilment
+                ) ORDER BY oi.created_at)
+                FROM order_items oi WHERE oi.order_id = o.id
+              ), '[]'::json) AS items
+       FROM orders o
+       JOIN users u ON u.id = o.customer_id
+       WHERE o.id = $1`,
+      [orderId],
+    );
+    const order = result.rows[0];
+    if (!order) return NextResponse.json({ error: "Order not found." }, { status: 404 });
+    return NextResponse.json({ order });
+  } catch (error) {
+    return apiError(error);
+  }
+}
+
 export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ orderId: string }> },
@@ -38,11 +75,17 @@ export async function PATCH(
       return NextResponse.json({ error: "Order not found." }, { status: 404 });
     }
     const order = result.rows[0];
+    if (input.status === "out_for_delivery") {
+      await query(
+        `UPDATE order_items SET fulfilment = 'delivering' WHERE order_id = $1 AND fulfilment = 'pending'`,
+        [order.id],
+      );
+    }
     const customerMessages: Record<string, string> = {
       confirmed: "Your order has been confirmed and is being prepared.",
       preparing: "Your order is being prepared for dispatch.",
       out_for_delivery: "Your order is out for delivery and will arrive shortly.",
-      delivered: "Your order has been delivered. Enjoy!",
+      delivered: "Your order has been delivered. Your official receipt is ready — open Track your order to view and print a copy.",
       cancelled: "Your order has been cancelled. Contact support if this was unexpected.",
     };
     const message = customerMessages[input.status];
