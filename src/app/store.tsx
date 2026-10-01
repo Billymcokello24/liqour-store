@@ -85,7 +85,12 @@ const StoreContext = createContext<StoreValue | null>(null)
 const api = "/api"
 
 export function getSessionToken() {
-  return sessionStorage.getItem("henrys-session")
+  return localStorage.getItem("henrys-session") ?? sessionStorage.getItem("henrys-session")
+}
+
+export function setSessionToken(token: string) {
+  localStorage.setItem("henrys-session", token)
+  sessionStorage.removeItem("henrys-session")
 }
 
 export function authHeaders(): Record<string, string> {
@@ -147,6 +152,7 @@ export function isStaffRole(role: string | undefined) {
 }
 
 export function clearSession() {
+  localStorage.removeItem("henrys-session")
   sessionStorage.removeItem("henrys-session")
   sessionStorage.removeItem("henrys-return-to")
 }

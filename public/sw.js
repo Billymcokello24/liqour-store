@@ -36,6 +36,7 @@ self.addEventListener("push", (event) => {
     data: { url: data.url || "/" },
     showTimestamp: true,
     timestamp: Date.now(),
+    silent: false,
     vibrate: [120, 60, 120],
   };
   event.waitUntil(

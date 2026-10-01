@@ -68,6 +68,7 @@ import {
   isStaffRole,
   PLACEHOLDER_IMAGE,
   ROLE_LABELS,
+  setSessionToken,
   useStore,
 } from "./store"
 import type { Order, Product, SessionClaims } from "./store"
@@ -817,7 +818,7 @@ function SiteHeader() {
               <span>Install</span>
             </button>
           )}
-          <Link to="/shop" aria-label="Search products">
+          <Link to="/shop" className="header-search" aria-label="Search products">
             <Search />
           </Link>
           {isCustomer && (
@@ -836,14 +837,16 @@ function SiteHeader() {
             </Link>
           )}
           {headerClaims ? (
-            <div className="flex items-center gap-2">
+            <div className="header-auth">
               <Link
                 to={isStaffRole(headerClaims.role) ? "/admin" : "/account"}
-                className="flex items-center gap-1 text-xs font-semibold hover:text-amber-800"
+                className="header-account-link"
                 title={isStaffRole(headerClaims.role) ? "Staff console" : "Account"}
               >
-                <CircleUserRound />{" "}
-                {isStaffRole(headerClaims.role) ? "Console" : "Account"}
+                <CircleUserRound />
+                <span className="header-auth-label">
+                  {isStaffRole(headerClaims.role) ? "Console" : "Account"}
+                </span>
               </Link>
               <button
                 type="button"
@@ -859,8 +862,9 @@ function SiteHeader() {
               </button>
             </div>
           ) : (
-            <Link to="/login" aria-label="Account">
+            <Link to="/login" className="header-account-link" aria-label="Account">
               <CircleUserRound />
+              <span className="header-auth-label">Login</span>
             </Link>
           )}
           <button
@@ -2109,7 +2113,7 @@ function CartPage() {
               type="button"
               className="button button-dark button-wide"
               onClick={() => {
-                if (!sessionStorage.getItem("henrys-session")) {
+                if (!getSessionToken()) {
                   sessionStorage.setItem("henrys-return-to", "/checkout")
                   navigate("/login")
                   return
@@ -2159,7 +2163,7 @@ function CheckoutPage() {
     null,
   )
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const session = sessionStorage.getItem("henrys-session")
+  const session = getSessionToken()
 
   useEffect(() => {
     if (!session) return
@@ -4247,7 +4251,7 @@ function LoginPage() {
                 )
                 return
               }
-              sessionStorage.setItem("henrys-session", data.token)
+              setSessionToken(data.token)
               const staff = data.user.role !== "customer"
               const destination =
                 sessionStorage.getItem("henrys-return-to") ??
@@ -6521,7 +6525,7 @@ function CategoryModal({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const session = sessionStorage.getItem("henrys-session")
+    const session = getSessionToken()
     if (!session) {
       setError("Sign in with a staff account to manage categories.")
       return
@@ -6882,7 +6886,7 @@ function BrandModal({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const session = sessionStorage.getItem("henrys-session")
+    const session = getSessionToken()
     if (!session) {
       setError("Sign in with a staff account to manage brands.")
       return
@@ -7315,7 +7319,7 @@ function AdminDashboard({
   >([])
 
   useEffect(() => {
-    const session = sessionStorage.getItem("henrys-session")
+    const session = getSessionToken()
     if (!session) {
       setDashboardError("Sign in with a staff account to view live operations.")
       return
@@ -7954,7 +7958,7 @@ function AdminOrders() {
   }
 
   useEffect(() => {
-    const session = sessionStorage.getItem("henrys-session")
+    const session = getSessionToken()
     if (!session) {
       setError("Sign in with a staff account to manage orders.")
       return
@@ -8022,7 +8026,7 @@ function AdminOrders() {
     setDeliverNotice("")
     const adminId = selected?.adminId
     if (!adminId) return
-    const session = sessionStorage.getItem("henrys-session")
+    const session = getSessionToken()
     if (!session) return
     let cancelled = false
     setDetailLoading(true)
@@ -8070,7 +8074,7 @@ function AdminOrders() {
   }
 
   async function dispatchOrder() {
-    const session = sessionStorage.getItem("henrys-session")
+    const session = getSessionToken()
     if (!session || !selected?.adminId) {
       setError("Sign in with a staff account to dispatch orders.")
       return
@@ -8143,7 +8147,7 @@ function AdminOrders() {
   }
 
   async function updateStatus(order: Order, newStatus: Order["status"]) {
-    const session = sessionStorage.getItem("henrys-session")
+    const session = getSessionToken()
     if (!session || !order.adminId) {
       setError("This order cannot be updated without a staff session.")
       return
@@ -8519,7 +8523,7 @@ function AdminBookings() {
   const [updating, setUpdating] = useState<string | null>(null)
 
   useEffect(() => {
-    const session = sessionStorage.getItem("henrys-session")
+    const session = getSessionToken()
     if (!session) {
       setError("Sign in with a staff account to manage bookings.")
       return
@@ -8544,7 +8548,7 @@ function AdminBookings() {
   }, [])
 
   async function updateStatus(booking: AdminBooking, status: string) {
-    const session = sessionStorage.getItem("henrys-session")
+    const session = getSessionToken()
     if (!session) return
     setUpdating(booking.id)
     setError("")
@@ -9071,7 +9075,7 @@ function AdminCustomers() {
   const [viewing, setViewing] = useState<AdminCustomer | null>(null)
 
   useEffect(() => {
-    const session = sessionStorage.getItem("henrys-session")
+    const session = getSessionToken()
     if (!session) {
       setError("Sign in with a staff account to view customers.")
       setLoading(false)
@@ -10789,7 +10793,7 @@ function EditProductModal({
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const session = sessionStorage.getItem("henrys-session")
+    const session = getSessionToken()
     if (!session)
       return setError("Sign in with a staff account to edit products.")
     const values = new FormData(event.currentTarget)
@@ -11017,7 +11021,7 @@ function ProductModal({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const session = sessionStorage.getItem("henrys-session")
+    const session = getSessionToken()
     if (!session) {
       setError("Sign in with a staff account to create products.")
       return

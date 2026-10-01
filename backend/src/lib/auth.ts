@@ -16,7 +16,7 @@ export async function createSession(session: Session) {
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(session.userId)
     .setIssuedAt()
-    .setExpirationTime("12h")
+    .setExpirationTime("30d")
     .sign(authSecret());
 }
 

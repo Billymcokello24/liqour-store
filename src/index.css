@@ -711,7 +711,8 @@ tbody tr:hover { background: #faf9f5; }
   .site-nav-overlay { position: fixed; inset: 0; z-index: 90; background: rgba(24, 22, 18, .5); }
   .mobile-menu { display: grid; }
   .header-actions { gap: 10px; }
-  .header-actions > a:first-child, .header-actions > a:nth-child(2) { display: none; }
+  .header-search { display: none; }
+  .header-auth-label { display: none; }
   .hero { min-height: 600px; height: calc(100vh - 100px); }
   .hero-content { left: 22px; right: 22px; top: 47%; }
   .hero h1 { font-size: clamp(58px, 18vw, 84px); }
@@ -1583,6 +1584,11 @@ a.contact-card:hover { border-color: var(--ink); }
   .sort-field { margin-left: 0; }
   .sort-field + .toolbar-check { margin-left: 0; }
 }
+
+/* HEADER ACCOUNT / LOGIN BADGE */
+.header-auth { display: flex; align-items: center; gap: 8px; }
+.header-account-link { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.header-account-link svg { width: 18px; height: 18px; }
 
 /* PUSH ALERTS TOGGLE */
 .push-toggle { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: 0 0 18px; padding: 16px 18px; background: var(--white); border: 1px solid var(--line); }
