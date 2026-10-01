@@ -1572,3 +1572,14 @@ a.contact-card:hover { border-color: var(--ink); }
 .account-order-info > div { display: flex; flex-direction: column; gap: 4px; }
 .account-order-thumb { width: 46px; height: 46px; object-fit: cover; border: 1px solid var(--line); background: var(--soft); flex: none; }
 .account-order-info em { font-style: normal; font-size: 9px; color: var(--muted); }
+
+/* CATEGORY + BRAND BROWSING TOOLBAR */
+.shop-toolbar { flex-wrap: wrap; }
+.toolbar-check { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; white-space: nowrap; }
+.toolbar-check input { width: 14px; height: 14px; accent-color: var(--ink); }
+.sort-field + .toolbar-check { margin-left: auto; }
+@media (max-width: 720px) {
+  .shop-toolbar { gap: 12px; }
+  .sort-field { margin-left: 0; }
+  .sort-field + .toolbar-check { margin-left: 0; }
+}

@@ -12343,12 +12343,34 @@ type PublicBrandRow = PublicCategoryRow & {
 
 function CategoriesIndexPage() {
   const [categories, setCategories] = useState<PublicCategoryRow[] | null>(null)
+  const [search, setSearch] = useState("")
+  const [sort, setSort] = useState("A to Z")
+  const [hideEmpty, setHideEmpty] = useState(false)
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   useEffect(() => {
     fetch("/api/catalogue/categories")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => data && setCategories(data.categories))
       .catch(() => setCategories([]))
   }, [])
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase()
+    const result = (categories ?? []).filter(
+      (category) =>
+        (!hideEmpty || category.product_count > 0) &&
+        (!term ||
+          `${category.name} ${category.description ?? ""}`
+            .toLowerCase()
+            .includes(term)),
+    )
+    return [...result].sort((a, b) =>
+      sort === "Most bottles"
+        ? b.product_count - a.product_count
+        : sort === "Z to A"
+          ? b.name.localeCompare(a.name)
+          : a.name.localeCompare(b.name),
+    )
+  }, [categories, search, sort, hideEmpty])
   if (!categories)
     return (
       <div className="page-wrap simple-page">
@@ -12357,21 +12379,80 @@ function CategoriesIndexPage() {
     )
   return (
     <div className="page-wrap">
-      <span className="eyebrow">Browse the cellar</span>
-      <h1>Shop by category</h1>
-      <p className="section-copy">
-        Explore a thoughtful range of spirits, wines, beers, mixers and
-        non-alcoholic choices.
-      </p>
+      <div className="shop-intro">
+        <span className="eyebrow">Browse the cellar</span>
+        <h1>Shop by category</h1>
+        <p className="section-copy">
+          Explore a thoughtful range of spirits, wines, beers, mixers and
+          non-alcoholic choices.
+        </p>
+      </div>
+      <div className="shop-toolbar">
+        <label className="search-field">
+          <Search />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search categories"
+            aria-label="Search categories"
+          />
+        </label>
+        <label className="sort-field">
+          Sort by{" "}
+          <select
+            value={sort}
+            onChange={(event) => setSort(event.target.value)}
+            aria-label="Sort categories"
+          >
+            <option>A to Z</option>
+            <option>Z to A</option>
+            <option>Most bottles</option>
+          </select>
+        </label>
+        <label className="toolbar-check">
+          <input
+            type="checkbox"
+            checked={hideEmpty}
+            onChange={(event) => setHideEmpty(event.target.checked)}
+          />
+          Hide empty
+        </label>
+        <div className="view-toggle">
+          <button
+            type="button"
+            className={viewMode === "grid" ? "active" : ""}
+            onClick={() => setViewMode("grid")}
+            title="Grid view"
+            aria-label="Grid view"
+          >
+            <LayoutGrid size={16} />
+          </button>
+          <button
+            type="button"
+            className={viewMode === "list" ? "active" : ""}
+            onClick={() => setViewMode("list")}
+            title="List view"
+            aria-label="List view"
+          >
+            <List size={16} />
+          </button>
+        </div>
+      </div>
       {!categories.length ? (
         <div className="empty-state">
           <LayoutGrid />
           <h2>Categories are being prepared</h2>
           <p>Check back shortly — our team is organizing the shelves.</p>
         </div>
-      ) : (
+      ) : !filtered.length ? (
+        <div className="empty-state">
+          <Search />
+          <h2>No categories match those filters</h2>
+          <p>Try a different search term or clear the filters.</p>
+        </div>
+      ) : viewMode === "grid" ? (
         <div className="category-grid">
-          {categories.map((category) => (
+          {filtered.map((category) => (
             <Link
               key={category.slug}
               to={`/categories/${category.slug}`}
@@ -12386,6 +12467,28 @@ function CategoriesIndexPage() {
                 <h2>{category.name}</h2>
                 <p>{category.product_count} bottles</p>
               </div>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <div className="brand-list">
+          {filtered.map((category) => (
+            <Link
+              key={category.slug}
+              to={`/categories/${category.slug}`}
+              className="brand-list-row"
+            >
+              <SafeImg
+                src={category.image_url ?? PLACEHOLDER_IMAGE}
+                alt=""
+                loading="lazy"
+              />
+              <div className="blr-info">
+                <strong>{category.name}</strong>
+                <small>{category.description ?? "Collection coming soon"}</small>
+              </div>
+              <span className="blr-count">{category.product_count} bottles</span>
+              <ArrowRight />
             </Link>
           ))}
         </div>
@@ -12443,6 +12546,8 @@ function CategoryDetailPage() {
 function BrandsIndexPage() {
   const [brands, setBrands] = useState<PublicBrandRow[] | null>(null)
   const [search, setSearch] = useState("")
+  const [sort, setSort] = useState("A to Z")
+  const [hideEmpty, setHideEmpty] = useState(false)
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   useEffect(() => {
     fetch("/api/catalogue/brands")
@@ -12450,15 +12555,24 @@ function BrandsIndexPage() {
       .then((data) => data && setBrands(data.brands))
       .catch(() => setBrands([]))
   }, [])
-  const filtered = useMemo(
-    () =>
-      (brands ?? []).filter((brand) =>
-        `${brand.name} ${brand.description ?? ""}`
-          .toLowerCase()
-          .includes(search.trim().toLowerCase()),
-      ),
-    [brands, search],
-  )
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase()
+    const result = (brands ?? []).filter(
+      (brand) =>
+        (!hideEmpty || brand.product_count > 0) &&
+        (!term ||
+          `${brand.name} ${brand.description ?? ""}`
+            .toLowerCase()
+            .includes(term)),
+    )
+    return [...result].sort((a, b) =>
+      sort === "Most bottles"
+        ? b.product_count - a.product_count
+        : sort === "Z to A"
+          ? b.name.localeCompare(a.name)
+          : a.name.localeCompare(b.name),
+    )
+  }, [brands, search, sort, hideEmpty])
   if (!brands)
     return (
       <div className="page-wrap simple-page">
@@ -12484,6 +12598,26 @@ function BrandsIndexPage() {
             placeholder="Search brands"
             aria-label="Search brands"
           />
+        </label>
+        <label className="sort-field">
+          Sort by{" "}
+          <select
+            value={sort}
+            onChange={(event) => setSort(event.target.value)}
+            aria-label="Sort brands"
+          >
+            <option>A to Z</option>
+            <option>Z to A</option>
+            <option>Most bottles</option>
+          </select>
+        </label>
+        <label className="toolbar-check">
+          <input
+            type="checkbox"
+            checked={hideEmpty}
+            onChange={(event) => setHideEmpty(event.target.checked)}
+          />
+          Hide empty
         </label>
         <div className="view-toggle">
           <button
