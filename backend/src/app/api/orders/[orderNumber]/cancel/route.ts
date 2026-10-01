@@ -27,7 +27,9 @@ export async function POST(
       if (!order) throw new Response("Order not found.", { status: 404 });
       if (!CANCELLABLE_STATUSES.includes(order.status)) {
         throw new Response(
-          "This order is already being dispatched and can no longer be cancelled. Contact support if you need help.",
+          order.status === "cancelled"
+            ? "This order has already been cancelled."
+            : "This order is already being dispatched and can no longer be cancelled. Contact support if you need help.",
           { status: 422 },
         );
       }
