@@ -4,5 +4,11 @@ Disallow: /admin
 Disallow: /account
 Disallow: /cart
 Disallow: /checkout
+Disallow: /order-confirmation
+Disallow: /search
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
 
 Sitemap: https://henryliqourhub.co.ke/sitemap.xml

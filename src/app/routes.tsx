@@ -73,6 +73,89 @@ import {
 } from "./store"
 import type { Order, Product, SessionClaims } from "./store"
 
+// ─── SEO (per-route document head) ───
+
+const SITE_ORIGIN = "https://henryliqourhub.co.ke"
+const BRAND_SUFFIX = "| Henry's Liquor Hub"
+
+type SeoInput = {
+  title: string
+  description: string
+  path?: string
+  image?: string
+  noindex?: boolean
+  jsonLd?: Record<string, unknown> | null
+}
+
+function setMeta(attr: "name" | "property", key: string, value: string) {
+  let tag = document.head.querySelector<HTMLMetaElement>(
+    `meta[${attr}="${key}"]`,
+  )
+  if (!tag) {
+    tag = document.createElement("meta")
+    tag.setAttribute(attr, key)
+    document.head.appendChild(tag)
+  }
+  tag.setAttribute("content", value)
+}
+
+function useSeo({
+  title,
+  description,
+  path,
+  image,
+  noindex,
+  jsonLd,
+}: SeoInput) {
+  useEffect(() => {
+    const fullTitle = title.includes(BRAND_SUFFIX)
+      ? title
+      : `${title} ${BRAND_SUFFIX}`
+    document.title = fullTitle
+    setMeta("name", "description", description)
+    setMeta("name", "robots", noindex ? "noindex,nofollow" : "index,follow")
+
+    const canonicalUrl = SITE_ORIGIN + (path ?? window.location.pathname)
+    let canonical = document.head.querySelector<HTMLLinkElement>(
+      'link[rel="canonical"]',
+    )
+    if (!canonical) {
+      canonical = document.createElement("link")
+      canonical.rel = "canonical"
+      document.head.appendChild(canonical)
+    }
+    canonical.href = canonicalUrl
+
+    const ogImage = image
+      ? image.startsWith("http")
+        ? image
+        : SITE_ORIGIN + image
+      : SITE_ORIGIN + "/icons/icon-512.png"
+    setMeta("property", "og:title", fullTitle)
+    setMeta("property", "og:description", description)
+    setMeta("property", "og:url", canonicalUrl)
+    setMeta("property", "og:image", ogImage)
+    setMeta("property", "og:type", jsonLd?.["@type"] === "Product" ? "product" : "website")
+    setMeta("name", "twitter:card", "summary_large_image")
+    setMeta("name", "twitter:title", fullTitle)
+    setMeta("name", "twitter:description", description)
+    setMeta("name", "twitter:image", ogImage)
+
+    let ldScript = document.getElementById("route-jsonld") as HTMLScriptElement | null
+    if (jsonLd) {
+      if (!ldScript) {
+        ldScript = document.createElement("script")
+        ldScript.id = "route-jsonld"
+        ldScript.type = "application/ld+json"
+        document.head.appendChild(ldScript)
+      }
+      ldScript.textContent = JSON.stringify(jsonLd)
+    } else if (ldScript) {
+      ldScript.remove()
+    }
+  }, [title, description, path, image, noindex, jsonLd])
+}
+
 
 // ─── NOTIFICATION PULSE (tone + unread badge + toast) ───
 
@@ -1137,6 +1220,12 @@ function ProductSection({
 }
 
 function HomePage() {
+  useSeo({
+    title: "Henry's Liquor Hub — Same-day liquor delivery in Nairobi",
+    description:
+      "Shop whisky, gin, wine, champagne and more from Nairobi's neighbourhood liquor store. Same-day delivery across Kenya.",
+    path: "/",
+  })
   const { products, catalogueLoading } = useStore()
   const [homeCategories, setHomeCategories] = useState<
     Array<{
@@ -1358,6 +1447,12 @@ function HomePage() {
 }
 
 function ShopPage() {
+  useSeo({
+    title: "Shop liquor online in Nairobi",
+    description:
+      "Browse the full Henry's Liquor Hub collection — whisky, gin, vodka, rum, wine, champagne and more with same-day delivery in Nairobi.",
+    path: "/shop",
+  })
   const { products } = useStore()
   const location = useLocation()
   const [search, setSearch] = useState(
@@ -1667,6 +1762,74 @@ function ProductDetailPage() {
     : products
         .filter((p) => p.id !== id && p.category === product?.category)
         .slice(0, 3)
+
+  const productJsonLd = useMemo(() => {
+    const p = detail?.product
+    if (!p || p.variants.length === 0) return null
+    const cheapest = p.variants.reduce((a, b) =>
+      b.priceKes < a.priceKes ? b : a,
+    )
+    const inStock = p.variants.some((v) => v.stock > 0)
+    const images = p.images.map((img) =>
+      img.url.startsWith("http") ? img.url : SITE_ORIGIN + img.url,
+    )
+    const description = (
+      p.short_description ??
+      p.description ??
+      `${p.name} by ${p.brand}, delivered same-day in Nairobi by Henry's Liquor Hub.`
+    )
+      .replace(/<[^>]*>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+    const ld: Record<string, unknown> = {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      name: p.name,
+      description: description.slice(0, 300),
+      image: images.length ? images : [SITE_ORIGIN + "/icons/icon-512.png"],
+      brand: { "@type": "Brand", name: p.brand },
+      sku: cheapest.sku,
+      category: p.category,
+      offers: {
+        "@type": "Offer",
+        url: SITE_ORIGIN + "/products/" + p.slug,
+        priceCurrency: "KES",
+        price: cheapest.priceKes,
+        availability: inStock
+          ? "https://schema.org/InStock"
+          : "https://schema.org/OutOfStock",
+        itemCondition: "https://schema.org/NewCondition",
+      },
+    }
+    if (p.review_count > 0) {
+      ld.aggregateRating = {
+        "@type": "AggregateRating",
+        ratingValue: p.rating,
+        reviewCount: p.review_count,
+      }
+    }
+    return ld
+  }, [detail])
+
+  useSeo({
+    title: detail
+      ? `${detail.product.name} — ${detail.product.brand}`
+      : "Bottle details",
+    description: detail
+      ? (
+          detail.product.short_description ??
+          detail.product.description ??
+          `${detail.product.name} by ${detail.product.brand}. Same-day delivery from Henry's Liquor Hub, Nairobi.`
+        )
+          .replace(/<[^>]*>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 160)
+      : "Product details loading.",
+    path: id ? `/products/${id}` : undefined,
+    image: detail?.product.images[0]?.url,
+    jsonLd: productJsonLd,
+  })
 
   if (!product && (catalogueLoading || detailLoading))
     return (
@@ -2062,6 +2225,7 @@ function ProductDetailPage() {
 }
 
 function CartPage() {
+  useSeo({ title: "Your cart", description: "Review the bottles in your cart before checkout.", noindex: true })
   const {
     cart,
     cartTotal,
@@ -2211,6 +2375,7 @@ type CheckoutForm = {
 }
 
 function CheckoutPage() {
+  useSeo({ title: "Checkout", description: "Complete your Henry's Liquor Hub order.", noindex: true })
   const { cart, cartTotal, completeOrder, coupon } = useStore()
   const navigate = useNavigate()
   const [step, setStep] = useState<1 | 2 | 3>(1)
@@ -3002,6 +3167,7 @@ function CheckoutPage() {
 // ─── ORDER CONFIRMATION ───────────────────────────────────────────────────────
 
 function OrderConfirmationPage() {
+  useSeo({ title: "Order confirmed", description: "Your Henry's Liquor Hub order confirmation.", noindex: true })
   const { lastOrder } = useStore()
   const id = new URLSearchParams(window.location.search).get("id") ?? "HLH-???"
   const eta = new Date(
@@ -3331,6 +3497,7 @@ type TrackRecentOrder = {
 }
 
 function OrderTrackingPage() {
+  useSeo({ title: "Track your order", description: "Follow your Henry's Liquor Hub delivery from confirmation to doorstep.", noindex: true })
   const { lastOrder } = useStore()
   const orderParam =
     new URLSearchParams(useLocation().search).get("order") ?? ""
@@ -3788,6 +3955,7 @@ function CollectionPage({
 }
 
 function OffersPage() {
+  useSeo({ title: "Liquor deals & offers in Nairobi", description: "Current discounts on whisky, gin, wine and more at Henry's Liquor Hub." })
   const { products } = useStore()
   return (
     <CollectionPage
@@ -3800,6 +3968,7 @@ function OffersPage() {
 }
 
 function NewArrivalsPage() {
+  useSeo({ title: "New arrivals", description: "The latest bottles to land at Henry's Liquor Hub, fresh from the distillery." })
   const { products } = useStore()
   return (
     <CollectionPage
@@ -3812,6 +3981,7 @@ function NewArrivalsPage() {
 }
 
 function BookingPage() {
+  useSeo({ title: "Bulk orders & corporate supply", description: "Case orders, events and corporate gifting for Nairobi teams, planned and delivered." })
   const [sent, setSent] = useState(false)
   const [bookingNumber, setBookingNumber] = useState("")
   const [error, setError] = useState("")
@@ -4006,6 +4176,11 @@ function EditorialPage({
   const [cms, setCms] = useState<{ title: string; body: CmsPageBody } | null>(
     null,
   )
+  useSeo({
+    title: cms?.title ?? title,
+    description: copy,
+    path: slug ? `/${slug}` : undefined,
+  })
   useEffect(() => {
     if (!slug) return
     fetch(`/api/cms/pages?slug=${slug}`)
@@ -4055,6 +4230,7 @@ type ContactInfo = {
 }
 
 function ContactPage() {
+  useSeo({ title: "Contact us", description: "Talk to Henry's Liquor Hub about orders, delivery windows and the collection." })
   const [contact, setContact] = useState<ContactInfo | null>(null)
   const [hours, setHours] = useState<{ weekday?: string; weekend?: string } | null>(
     null,
@@ -4157,6 +4333,12 @@ function DynamicCmsPage() {
   const [page, setPage] = useState<
     { title: string; body: CmsPageBody } | null | undefined
   >(undefined)
+  useSeo({
+    title: page?.title ?? "Page not found",
+    description: page
+      ? `Read more on Henry's Liquor Hub.`
+      : "This page is not available.",
+  })
   useEffect(() => {
     if (!slug) {
       setPage(null)
@@ -4245,6 +4427,7 @@ function SimplePage({
 }
 
 function LoginPage() {
+  useSeo({ title: "Sign in", description: "Sign in to your Henry's Liquor Hub account.", noindex: true })
   const navigate = useNavigate()
   const [mode, setMode] = useState<"customer" | "staff">("customer")
   const [message, setMessage] = useState<string | null>(null)
@@ -4394,6 +4577,7 @@ function LoginPage() {
 }
 
 function RegisterPage() {
+  useSeo({ title: "Create an account", description: "Create your Henry's Liquor Hub account.", noindex: true })
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -4551,6 +4735,7 @@ function signOutCustomer(navigate: (to: string) => void) {
 }
 
 function AccountPage() {
+  useSeo({ title: "My account", description: "Manage your Henry's Liquor Hub orders and preferences.", noindex: true })
   const claims = getSessionClaims()
   const [tab, setTab] = useState("Overview")
   const navigate = useNavigate()
@@ -7061,6 +7246,7 @@ function BrandModal({
 }
 
 function AdminPage() {
+  useSeo({ title: "Admin console", description: "Henry's Liquor Hub operations console.", noindex: true })
   const location = useLocation()
   const navigate = useNavigate()
   const claims = getSessionClaims()
@@ -12470,6 +12656,11 @@ function Footer() {
 // ─── COLLECTIONS & PASSWORD RESET PAGES ──────────────────────────────────────
 
 function CollectionsIndexPage() {
+  useSeo({
+    title: "Curated bottle collections",
+    description: "Team-picked bundles and edits — premium sipping, party packs and gift boxes from Henry's Liquor Hub.",
+    path: "/collections",
+  })
   const [collections, setCollections] = useState<
     {
       name: string
@@ -12530,6 +12721,13 @@ function CollectionDetailPage() {
     products: ProductDetail["related"]
   } | null>(null)
   const [notFound, setNotFound] = useState(false)
+  useSeo({
+    title: data ? `${data.collection.name} collection` : "Collection",
+    description:
+      data?.collection.description ??
+      "A curated edit from Henry's Liquor Hub.",
+    path: slug ? `/collections/${slug}` : undefined,
+  })
   useEffect(() => {
     if (!slug) return
     let active = true
@@ -12583,6 +12781,11 @@ type PublicBrandRow = PublicCategoryRow & {
 }
 
 function CategoriesIndexPage() {
+  useSeo({
+    title: "Liquor categories — whisky, gin, wine and more",
+    description: "Browse every drinks category at Henry's Liquor Hub, from whisky and gin to wine, champagne and spirits.",
+    path: "/categories",
+  })
   const [categories, setCategories] = useState<PublicCategoryRow[] | null>(null)
   const [search, setSearch] = useState("")
   const [sort, setSort] = useState("A to Z")
@@ -12745,6 +12948,13 @@ function CategoryDetailPage() {
     products: ProductDetail["related"]
   } | null>(null)
   const [notFound, setNotFound] = useState(false)
+  useSeo({
+    title: data ? `${data.category.name} delivery in Nairobi` : "Category",
+    description:
+      data?.category.description ??
+      `Shop ${data?.category.name ?? "bottles"} with same-day delivery from Henry's Liquor Hub.`,
+    path: slug ? `/categories/${slug}` : undefined,
+  })
   useEffect(() => {
     if (!slug) return
     let active = true
@@ -12785,6 +12995,11 @@ function CategoryDetailPage() {
 }
 
 function BrandsIndexPage() {
+  useSeo({
+    title: "Liquor brands we stock",
+    description: "Every brand on the Henry's Liquor Hub shelves — Scotch houses, gin distilleries, wineries and more.",
+    path: "/brands",
+  })
   const [brands, setBrands] = useState<PublicBrandRow[] | null>(null)
   const [search, setSearch] = useState("")
   const [sort, setSort] = useState("A to Z")
@@ -12949,6 +13164,13 @@ function BrandDetailPage() {
     products: ProductDetail["related"]
   } | null>(null)
   const [notFound, setNotFound] = useState(false)
+  useSeo({
+    title: data ? `${data.brand.name} — delivered in Nairobi` : "Brand",
+    description:
+      data?.brand.description ??
+      `Shop the full ${data?.brand.name ?? "brand"} range at Henry's Liquor Hub.`,
+    path: slug ? `/brands/${slug}` : undefined,
+  })
   useEffect(() => {
     if (!slug) return
     let active = true
@@ -12989,6 +13211,7 @@ function BrandDetailPage() {
 }
 
 function ForgotPasswordPage() {
+  useSeo({ title: "Forgot password", description: "Reset your Henry's Liquor Hub password.", noindex: true })
   const [email, setEmail] = useState("")
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
@@ -13092,6 +13315,7 @@ function ForgotPasswordPage() {
 }
 
 function ResetPasswordPage() {
+  useSeo({ title: "Reset password", description: "Set a new Henry's Liquor Hub password.", noindex: true })
   const navigate = useNavigate()
   const location = useLocation()
   const token =
