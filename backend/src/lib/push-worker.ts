@@ -24,6 +24,8 @@ const TITLES: Record<string, string> = {
   "order-received": "New order received",
   "support-reply": "Support reply",
   "password-changed": "Password changed",
+  "push-welcome": "Alerts enabled",
+  "push-test": "Test notification",
 };
 
 function messageFor(row: PendingRow): PushMessage {

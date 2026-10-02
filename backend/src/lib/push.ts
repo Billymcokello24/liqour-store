@@ -65,14 +65,16 @@ export async function upsertSubscription(input: {
   userId: string | null;
   platform: string | null;
 }) {
-  await query(
+  const result = await query<{ inserted: boolean }>(
     `INSERT INTO web_push_subscriptions (user_id, endpoint, p256dh, auth, platform)
      VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (endpoint) DO UPDATE
      SET user_id = COALESCE(EXCLUDED.user_id, web_push_subscriptions.user_id),
-         p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth, last_seen_at = now()`,
+         p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth, last_seen_at = now()
+     RETURNING (xmax = 0) AS inserted`,
     [input.userId, input.endpoint, input.p256dh, input.auth, input.platform],
   );
+  return result.rows[0]?.inserted ?? false;
 }
 
 export async function removeSubscription(endpoint: string) {
