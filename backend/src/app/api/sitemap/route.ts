@@ -44,7 +44,8 @@ export async function GET() {
   );
   const urls: string[] = [];
   for (const row of STATIC_ROWS) {
-    urls.push(entry(row, row.path === "/" ? "daily" : "weekly", row.path === "/shop" ? "0.9" : "0.6"));
+    const priority = row.path === "/" ? "1.0" : row.path === "/shop" ? "0.9" : "0.6";
+    urls.push(entry(row, row.path === "/" ? "daily" : "weekly", priority));
   }
   for (const row of dynamic.rows) {
     const priority = row.path.startsWith("/products/") ? "0.8" : "0.7";

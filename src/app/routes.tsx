@@ -78,6 +78,14 @@ import type { Order, Product, SessionClaims } from "./store"
 const SITE_ORIGIN = "https://henryliqourhub.co.ke"
 const BRAND_SUFFIX = "| Henry's Liquor Hub"
 
+function cleanText(value: string | null | undefined, max: number) {
+  return (value ?? "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max)
+}
+
 type SeoInput = {
   title: string
   description: string
@@ -108,7 +116,7 @@ function useSeo({
   jsonLd,
 }: SeoInput) {
   useEffect(() => {
-    const fullTitle = title.includes(BRAND_SUFFIX)
+    const fullTitle = title.includes("Henry's Liquor Hub")
       ? title
       : `${title} ${BRAND_SUFFIX}`
     document.title = fullTitle
@@ -1773,14 +1781,10 @@ function ProductDetailPage() {
     const images = p.images.map((img) =>
       img.url.startsWith("http") ? img.url : SITE_ORIGIN + img.url,
     )
-    const description = (
-      p.short_description ??
-      p.description ??
+    const description =
+      cleanText(p.short_description, 300) ||
+      cleanText(p.description, 300) ||
       `${p.name} by ${p.brand}, delivered same-day in Nairobi by Henry's Liquor Hub.`
-    )
-      .replace(/<[^>]*>/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
     const ld: Record<string, unknown> = {
       "@context": "https://schema.org",
       "@type": "Product",
@@ -1816,15 +1820,9 @@ function ProductDetailPage() {
       ? `${detail.product.name} — ${detail.product.brand}`
       : "Bottle details",
     description: detail
-      ? (
-          detail.product.short_description ??
-          detail.product.description ??
-          `${detail.product.name} by ${detail.product.brand}. Same-day delivery from Henry's Liquor Hub, Nairobi.`
-        )
-          .replace(/<[^>]*>/g, " ")
-          .replace(/\s+/g, " ")
-          .trim()
-          .slice(0, 160)
+      ? cleanText(detail.product.short_description, 160) ||
+        cleanText(detail.product.description, 160) ||
+        `${detail.product.name} by ${detail.product.brand}. Same-day delivery from Henry's Liquor Hub, Nairobi.`
       : "Product details loading.",
     path: id ? `/products/${id}` : undefined,
     image: detail?.product.images[0]?.url,
