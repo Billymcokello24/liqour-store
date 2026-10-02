@@ -133,6 +133,10 @@ export async function PATCH(
     if (error instanceof Error && error.message === "Product not found.") {
       return NextResponse.json({ error: "Product not found." }, { status: 404 });
     }
+    const detail = String((error as { message?: string }).message ?? "");
+    if (detail.includes("product_variants_sku_key")) {
+      return NextResponse.json({ error: "That SKU is already assigned to another bottle — SKUs must be unique." }, { status: 409 });
+    }
     return apiError(error);
   }
 }

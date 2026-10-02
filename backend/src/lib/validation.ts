@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const productInput = z.object({
   name: z.string().trim().min(2).max(180),
-  slug: z.string().trim().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  slug: z.string().trim().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).optional(),
   brandId: z.string().uuid(),
   categoryId: z.string().uuid(),
   description: z.string().trim().max(8000).optional(),
@@ -14,7 +14,7 @@ export const productInput = z.object({
   featured: z.boolean().default(false),
   imageAssetId: z.string().uuid().optional(),
   variants: z.array(z.object({
-    sku: z.string().trim().min(2).max(80),
+    sku: z.string().trim().max(80).optional(),
     volumeMl: z.number().int().positive(),
     price: z.number().int().nonnegative(),
     compareAtPrice: z.number().int().nonnegative().nullable().optional(),

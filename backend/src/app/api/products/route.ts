@@ -3,6 +3,7 @@ import { query, transaction } from "@/lib/db";
 import { requireSession } from "@/lib/auth";
 import { apiError } from "@/lib/http";
 import { productInput } from "@/lib/validation";
+import { slugify, uniqueSlug, resolveSku, SkuTakenError } from "@/lib/products";
 
 export async function GET(request: NextRequest) {
   try {
@@ -56,13 +57,15 @@ export async function POST(request: NextRequest) {
     const session = await requireSession(request, ["super_admin", "manager", "sales"]);
     const input = productInput.parse(await request.json());
     const product = await transaction(async (client) => {
+      const baseSlug = input.slug?.trim() || slugify(input.name);
+      const slug = await uniqueSlug(client, baseSlug);
       const productResult = await client.query<{ id: string }>(
         `INSERT INTO products (name, slug, brand_id, category_id, description, short_description,
             country_of_origin, alcohol_percentage, serving_suggestion, status, featured)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
         [
           input.name,
-          input.slug,
+          slug,
           input.brandId,
           input.categoryId,
           input.description ?? null,
@@ -84,22 +87,28 @@ export async function POST(request: NextRequest) {
         );
         if (linked.rowCount === 0) throw new Error("selected-image-missing");
       }
+      const variantSkus: string[] = [];
       for (const variant of input.variants) {
+        const sku = await resolveSku(client, variant.sku);
         await client.query(
           `INSERT INTO product_variants (product_id, sku, barcode, volume_ml, price_kes, compare_at_price_kes, stock_on_hand)
            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [productId, variant.sku, variant.barcode ?? null, variant.volumeMl, variant.price, variant.compareAtPrice ?? null, variant.stock],
+          [productId, sku, variant.barcode ?? null, variant.volumeMl, variant.price, variant.compareAtPrice ?? null, variant.stock],
         );
+        variantSkus.push(sku);
       }
       await client.query(
         `INSERT INTO audit_logs (actor_id, action, resource_type, resource_id, new_value)
          VALUES ($1, 'product.created', 'product', $2, $3)`,
         [session.userId, productId, JSON.stringify({ name: input.name, status: input.status })],
       );
-      return { id: productId };
+      return { id: productId, slug, skus: variantSkus };
     });
     return NextResponse.json({ product }, { status: 201 });
   } catch (error) {
+    if (error instanceof SkuTakenError) {
+      return NextResponse.json({ error: `SKU "${error.sku}" is already assigned to another bottle. Use a unique SKU or leave it blank to auto-generate.` }, { status: 409 });
+    }
     return apiError(error);
   }
 }

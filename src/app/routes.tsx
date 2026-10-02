@@ -11321,7 +11321,7 @@ function ProductModal({
           imageAssetId: image?.id,
           variants: [
             {
-              sku: String(values.get("sku")).trim(),
+              sku: String(values.get("sku")).trim() || undefined,
               volumeMl,
               price: Number(values.get("price")),
               compareAtPrice: values.get("oldPrice")
@@ -11405,7 +11405,10 @@ function ProductModal({
               </label>
               <label>
                 SKU
-                <input name="sku" required placeholder="HLH-0000" />
+                <input
+                  name="sku"
+                  placeholder="Leave blank to auto-generate"
+                />
               </label>
               <label>
                 Volume
