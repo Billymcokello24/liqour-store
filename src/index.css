@@ -1595,4 +1595,5 @@ a.contact-card:hover { border-color: var(--ink); }
 .push-toggle strong { display: block; font-size: 13px; }
 .push-toggle p { margin: 3px 0 0; color: var(--muted); font-size: 11px; max-width: 460px; }
 .push-note { display: block; margin-top: 6px; color: var(--burgundy); font-size: 10.5px; }
-@media (max-width: 560px) { .push-toggle { flex-direction: column; align-items: flex-start; } }
+.push-test-button { margin-left: 8px; white-space: nowrap; }
+@media (max-width: 560px) { .push-toggle { flex-wrap: wrap; } .push-test-button { margin-left: 0; } }

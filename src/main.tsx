@@ -9,7 +9,13 @@ if (!document.title.trim()) {
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    void navigator.serviceWorker.register('/sw.js')
+    void navigator.serviceWorker
+      .register('/sw.js')
+      .then((registration) => {
+        // check for worker updates every 30 minutes without needing a reload
+        setInterval(() => void registration.update().catch(() => undefined), 30 * 60 * 1000)
+      })
+      .catch(() => undefined)
   })
 }
 

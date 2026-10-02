@@ -1,4 +1,4 @@
-const CACHE = "henrys-hub-v2";
+const CACHE = "henrys-hub-v3";
 const SHELL = ["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {

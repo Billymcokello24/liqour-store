@@ -281,6 +281,7 @@ function PushAlertsToggle() {
     () => localStorage.getItem("henrys-push-enabled") === "true",
   )
   const [busy, setBusy] = useState(false)
+  const [testing, setTesting] = useState(false)
   const [note, setNote] = useState("")
   useEffect(() => {
     const sync = () =>
@@ -326,6 +327,29 @@ function PushAlertsToggle() {
       >
         {busy ? "Working…" : enabled ? "Turn off" : "Allow notifications"}
       </button>
+      {enabled && (
+        <button
+          type="button"
+          className="button button-outline push-test-button"
+          disabled={testing}
+          onClick={async () => {
+            setTesting(true)
+            setNote("")
+            const response = await fetch("/api/push/test", {
+              method: "POST",
+              headers: authHeaders(),
+            }).catch(() => null)
+            setNote(
+              response?.ok
+                ? "Test alert queued — watch your phone for a pop-up in a few seconds."
+                : "We could not queue a test. Please try again.",
+            )
+            setTesting(false)
+          }}
+        >
+          {testing ? "Sending…" : "Send test notification"}
+        </button>
+      )}
     </div>
   )
 }
@@ -358,6 +382,27 @@ function describeNotification(
   return {
     title: orderNumber ? `Order ${orderNumber}` : "Notification",
     lines: [typeof p.message === "string" ? p.message : ""].filter(Boolean),
+  }
+}
+
+async function syncAppBadge(count: number) {
+  if (!("serviceWorker" in navigator)) return
+  type BadgeCapableRegistration = ServiceWorkerRegistration & {
+    setAppBadge?: (contents?: number) => Promise<void>
+    clearAppBadge?: () => Promise<void>
+  }
+  try {
+    const registration = (await navigator.serviceWorker.getRegistration()) as
+      | BadgeCapableRegistration
+      | undefined
+    if (!registration) return
+    if (count > 0 && registration.setAppBadge) {
+      await registration.setAppBadge(count)
+    } else if (registration.clearAppBadge) {
+      await registration.clearAppBadge()
+    }
+  } catch {
+    // badging is best-effort (unsupported before the worker is installed)
   }
 }
 
@@ -399,6 +444,7 @@ function useNotificationPulse(enabled: boolean, scope: "admin" | "customer") {
       }
       prevUnread.current = count
       setUnread(count)
+      void syncAppBadge(count)
     }
     void load()
     const timer = window.setInterval(() => void load(), 12000)

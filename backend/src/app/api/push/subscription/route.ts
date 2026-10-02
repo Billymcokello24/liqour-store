@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { readSession } from "@/lib/auth";
+import { query } from "@/lib/db";
 import { pushConfigured, removeSubscription, upsertSubscription } from "@/lib/push";
 
 const subscriptionSchema = z.object({
@@ -30,13 +31,23 @@ export async function POST(request: NextRequest) {
           : /linux/i.test(userAgent)
             ? "linux"
             : null;
-  await upsertSubscription({
+  const isNew = await upsertSubscription({
     endpoint: parsed.data.endpoint,
     p256dh: parsed.data.keys.p256dh,
     auth: parsed.data.keys.auth,
     userId: session?.userId ?? null,
     platform,
   });
+  if (isNew && session?.userId) {
+    await query(
+      `INSERT INTO notification_log (user_id, channel, template_key, payload)
+       VALUES ($1, 'in_app', 'push-welcome', $2)`,
+      [
+        session.userId,
+        JSON.stringify({ message: "Alerts are on. Order and delivery updates will appear here, even with the app closed." }),
+      ],
+    ).catch(() => undefined);
+  }
   return NextResponse.json({ subscribed: true, linked: Boolean(session) });
 }
 
