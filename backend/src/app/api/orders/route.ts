@@ -6,7 +6,7 @@ import { orderInput } from "@/lib/validation";
 import { emailShell, esc, sendLoggedEmail } from "@/lib/mailer";
 
 const PAYMENT_LABELS: Record<string, string> = {
-  mpesa: "M-Pesa",
+  mpesa: "M-Pesa Buy Goods (Till 1755994)",
   card: "Card",
   bank: "Bank transfer",
   cash: "Pay on delivery (M-Pesa or cash at the door)",
@@ -90,10 +90,10 @@ export async function POST(request: NextRequest) {
         coupon = { id: found.id, code: found.code };
       }
       const created = await client.query<{ id: string; order_number: string }>(
-        `INSERT INTO orders (order_number, customer_id, payment_method, delivery_type, delivery_address, subtotal_kes, discount_kes, delivery_fee_kes, total_kes, customer_note)
-         VALUES ('HLH-' || to_char(now(), 'YYMMDD') || '-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 6)), $1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `INSERT INTO orders (order_number, customer_id, payment_method, payment_reference, payment_status, delivery_type, delivery_address, subtotal_kes, discount_kes, delivery_fee_kes, total_kes, customer_note)
+         VALUES ('HLH-' || to_char(now(), 'YYMMDD') || '-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 6)), $1, $2, $3, 'processing', $4, $5, $6, $7, $8, $9, $10)
          RETURNING id, order_number`,
-        [session.userId, input.paymentMethod, input.deliveryType, input.deliveryAddress ? JSON.stringify(input.deliveryAddress) : null, subtotal, discount, deliveryFee, subtotal - discount + deliveryFee, input.customerNote ?? null],
+        [session.userId, input.paymentMethod, input.paymentReference.toUpperCase(), input.deliveryType, input.deliveryAddress ? JSON.stringify(input.deliveryAddress) : null, subtotal, discount, deliveryFee, subtotal - discount + deliveryFee, input.customerNote ?? null],
       );
       if (coupon) {
         await client.query(`UPDATE coupons SET usage_count = usage_count + 1 WHERE id = $1`, [coupon.id]);
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
       await client.query(
         `INSERT INTO notification_log (user_id, channel, template_key, payload)
          VALUES ($1, 'in_app', 'order-created', $2)`,
-        [session.userId, JSON.stringify({ orderNumber: created.rows[0].order_number, totalKes: subtotal - discount + deliveryFee, message: "We have received your order and are preparing it now." })],
+        [session.userId, JSON.stringify({ orderNumber: created.rows[0].order_number, totalKes: subtotal - discount + deliveryFee, message: "We have received your order. It moves to preparation as soon as we confirm your M-Pesa payment." })],
       );
       const buyer = await client.query<{ first_name: string; last_name: string; email: string }>(
         "SELECT first_name, last_name, email FROM users WHERE id = $1",
@@ -128,6 +128,8 @@ export async function POST(request: NextRequest) {
               customerName: `${buyer.rows[0]?.first_name ?? ""} ${buyer.rows[0]?.last_name ?? ""}`.trim() || "Customer",
               items: lines.map((line) => ({ name: line.variant.name, quantity: line.quantity, priceKes: line.variant.price_kes })),
               location: input.deliveryType === "pickup" ? "Store pickup" : [address.address, address.area].filter(Boolean).join(", ") || "—",
+              paymentReference: input.paymentReference.toUpperCase(),
+              message: `Order ${created.rows[0].order_number} · KES ${(subtotal - discount + deliveryFee).toLocaleString("en-KE")} paid to Till via Ref ${input.paymentReference.toUpperCase()} — verify, then confirm payment.`,
               placedAt: new Date().toISOString(),
             }),
           ],
@@ -161,13 +163,13 @@ export async function POST(request: NextRequest) {
         templateKey: "order-confirmation",
         payload: { orderNumber: order.order_number, totalKes: order.totalKes },
         to: order.customerEmail,
-        subject: `Order ${order.order_number} confirmed`,
+        subject: `Order ${order.order_number} received — awaiting payment confirmation`,
         html: emailShell(
-          "Thank you — your order is confirmed",
+          "Thank you — your order is received",
           `<p>Hi ${esc(order.customerName)}, we have received order <strong>${esc(order.order_number)}</strong>.</p>` +
             `<ul style="padding-left:18px;margin:14px 0">${order.items.map((line) => `<li>${esc(line.name)} × ${line.quantity} — ${money(line.priceKes * line.quantity)}</li>`).join("")}</ul>` +
             `<p><strong>Total: ${money(order.totalKes)}</strong> (delivery ${order.deliveryFeeKes === 0 ? "free" : money(order.deliveryFeeKes)})</p>` +
-            `<p>Payment: ${esc(PAYMENT_LABELS[input.paymentMethod] ?? input.paymentMethod)}</p>` +
+            `<p>Payment: ${esc(PAYMENT_LABELS[input.paymentMethod] ?? input.paymentMethod)} — Ref <strong>${esc(input.paymentReference.toUpperCase())}</strong>. Our team is confirming it now; the order will be released as soon as the payment shows on our till.</p>` +
             (order.addressLine ? `<p>Delivering to: ${esc(order.addressLine)}</p>` : "") +
             `<p>Follow this order from your account — our team will call you before the rider leaves.</p>`,
         ),

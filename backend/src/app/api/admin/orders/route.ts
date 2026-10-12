@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
   try {
     await requireSession(request, ["super_admin", "manager", "sales", "delivery"]);
     const result = await query(
-      `SELECT o.id, o.order_number, o.status, o.payment_method, o.delivery_address,
+      `SELECT o.id, o.order_number, o.status, o.payment_method, o.payment_status, o.payment_reference, o.delivery_address,
               o.subtotal_kes, o.delivery_fee_kes, o.total_kes, o.placed_at,
               concat(u.first_name, ' ', u.last_name) AS customer_name,
               u.email AS customer_email, u.phone AS customer_phone

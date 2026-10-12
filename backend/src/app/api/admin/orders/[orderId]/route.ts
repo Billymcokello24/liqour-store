@@ -5,8 +5,10 @@ import { query } from "@/lib/db";
 import { apiError } from "@/lib/http";
 
 const statusInput = z.object({
-  status: z.enum(["confirmed", "preparing", "out_for_delivery", "delivered", "cancelled"]),
+  status: z.enum(["payment_confirmed", "confirmed", "preparing", "out_for_delivery", "delivered", "cancelled"]),
 });
+
+const RELEASED_BEYOND_PAYMENT = ["confirmed", "preparing", "ready", "out_for_delivery", "delivered"];
 
 export async function GET(
   request: NextRequest,
@@ -16,7 +18,7 @@ export async function GET(
     await requireSession(request, ["super_admin", "manager", "sales", "delivery"]);
     const { orderId } = await context.params;
     const result = await query(
-      `SELECT o.id, o.order_number, o.status, o.payment_method, o.payment_status, o.delivery_type,
+      `SELECT o.id, o.order_number, o.status, o.payment_method, o.payment_status, o.payment_reference, o.delivery_type,
               o.delivery_address, o.customer_note, o.subtotal_kes, o.discount_kes, o.delivery_fee_kes,
               o.total_kes, o.placed_at, o.updated_at,
               concat(u.first_name, ' ', u.last_name) AS customer_name,
@@ -58,6 +60,23 @@ export async function PATCH(
     ]);
     const { orderId } = await context.params;
     const input = statusInput.parse(await request.json());
+    const current = await query<{ payment_reference: string | null; payment_status: string }>(
+      `SELECT payment_reference, payment_status FROM orders WHERE id = $1`,
+      [orderId],
+    );
+    if (!current.rows[0]) {
+      return NextResponse.json({ error: "Order not found." }, { status: 404 });
+    }
+    if (
+      RELEASED_BEYOND_PAYMENT.includes(input.status) &&
+      current.rows[0].payment_reference &&
+      current.rows[0].payment_status !== "successful"
+    ) {
+      return NextResponse.json(
+        { error: "Confirm the M-Pesa payment before moving this order forward." },
+        { status: 422 },
+      );
+    }
     const result = await query<{
       id: string;
       status: string;
@@ -68,6 +87,7 @@ export async function PATCH(
       `UPDATE orders
        SET status = $1, updated_at = now(),
            payment_status = CASE
+             WHEN $1 = 'payment_confirmed' THEN 'successful'
              WHEN $1 = 'delivered' AND payment_method = 'cash' THEN 'successful'
              ELSE payment_status
            END
@@ -86,6 +106,7 @@ export async function PATCH(
       );
     }
     const customerMessages: Record<string, string> = {
+      payment_confirmed: "Payment confirmed — your order is released and being prepared for delivery.",
       confirmed: "Your order has been confirmed and is being prepared.",
       preparing: "Your order is being prepared for dispatch.",
       out_for_delivery: "Your order is out for delivery and will arrive shortly.",
@@ -106,8 +127,13 @@ export async function PATCH(
     }
     await query(
       `INSERT INTO audit_logs (actor_id, action, resource_type, resource_id, new_value)
-       VALUES ($1, 'order.status_updated', 'order', $2, $3)`,
-      [session.userId, orderId, JSON.stringify({ status: input.status })],
+       VALUES ($1, $4, 'order', $2, $3)`,
+      [
+        session.userId,
+        orderId,
+        JSON.stringify({ status: input.status }),
+        input.status === "payment_confirmed" ? "order.payment_confirmed" : "order.status_updated",
+      ],
     );
     return NextResponse.json({ order: result.rows[0] });
   } catch (error) {

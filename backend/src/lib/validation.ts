@@ -48,7 +48,8 @@ export const registrationInput = z.object({
 
 export const orderInput = z.object({
   items: z.array(z.object({ variantId: z.string().uuid(), quantity: z.number().int().positive().max(99) })).min(1).max(50),
-  paymentMethod: z.enum(["mpesa", "card", "bank", "cash"]),
+  paymentMethod: z.enum(["mpesa"]).default("mpesa"),
+  paymentReference: z.string().trim().min(4).max(40),
   deliveryType: z.enum(["delivery", "pickup"]),
   deliveryAddress: z.record(z.string(), z.unknown()).optional(),
   customerNote: z.string().trim().max(1000).optional(),

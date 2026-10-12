@@ -1422,7 +1422,7 @@ function HomePage() {
           {
             icon: CreditCard,
             title: "Secure payment",
-            body: "M-Pesa, card and configured business payment options.",
+            body: "Pay with M-Pesa Buy Goods (Till 1755994). We confirm your payment before releasing the order.",
           },
         ].map(({ icon: Icon, title, body }) => (
           <div key={title}>
@@ -2377,11 +2377,7 @@ function CheckoutPage() {
   const { cart, cartTotal, completeOrder, coupon } = useStore()
   const navigate = useNavigate()
   const [step, setStep] = useState<1 | 2 | 3>(1)
-  const [payMethod, setPayMethod] = useState<"mpesa" | "mpesa-till" | "card" | "bank">("mpesa-till")
-  const [payOnDelivery, setPayOnDelivery] = useState(false)
   const [tillRef, setTillRef] = useState("")
-  const [mpesaState, setMpesaState] =
-    useState<"idle" | "sending" | "prompt" | "verified">("idle")
   const [checkoutError, setCheckoutError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [form, setForm] = useState<CheckoutForm>({
@@ -2393,7 +2389,6 @@ function CheckoutPage() {
   const [account, setAccount] = useState<{ name: string; email: string } | null>(
     null,
   )
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const session = getSessionToken()
 
   useEffect(() => {
@@ -2417,13 +2412,6 @@ function CheckoutPage() {
       })
       .catch(() => undefined)
   }, [session])
-
-  useEffect(
-    () => () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-    },
-    [],
-  )
 
   // ── Login guard: show prompt before cart is even visible ──────────────────
   if (!session && cart.length > 0) {
@@ -2476,14 +2464,6 @@ function CheckoutPage() {
     }
   }
 
-  function requestMpesa() {
-    setMpesaState("sending")
-    timerRef.current = setTimeout(() => {
-      setMpesaState("prompt")
-      timerRef.current = setTimeout(() => setMpesaState("verified"), 4500)
-    }, 1800)
-  }
-
   async function handlePlaceOrder() {
     if (!session) {
       setCheckoutError("Please sign in before placing an order.")
@@ -2512,12 +2492,8 @@ function CheckoutPage() {
             variantId: item.variantId,
             quantity: item.quantity,
           })),
-          paymentMethod:
-            payOnDelivery && (payMethod === "mpesa" || payMethod === "mpesa-till")
-              ? "cash"
-              : payMethod === "mpesa-till"
-                ? "mpesa"
-                : payMethod,
+          paymentMethod: "mpesa",
+          paymentReference: tillRef.trim().toUpperCase(),
           deliveryType: "delivery",
           couponCode: coupon?.code,
           deliveryAddress: {
@@ -2527,10 +2503,7 @@ function CheckoutPage() {
             address: form.address,
             area: form.area,
           },
-          customerNote:
-            payMethod === "mpesa-till" && !payOnDelivery
-              ? `M-Pesa Buy Goods Till 1755994 (Ref: ${tillRef || "1755994"}). ${form.notes}`
-              : form.notes || undefined,
+          customerNote: form.notes || undefined,
         }),
       })
       const data = await response.json().catch(() => null)
@@ -2552,18 +2525,9 @@ function CheckoutPage() {
           address: form.address,
           area: form.area,
         },
-        payment:
-          payOnDelivery &&
-          (payMethod === "mpesa" || payMethod === "mpesa-till")
-            ? "Pay on delivery"
-            : payMethod === "mpesa"
-              ? "M-Pesa"
-              : payMethod === "mpesa-till"
-                ? "M-Pesa Buy Goods"
-                : payMethod === "card"
-                  ? "Card"
-                  : "Bank Transfer",
-        status: "confirmed",
+        payment: "M-Pesa Buy Goods (Till 1755994)",
+        paymentReference: tillRef.trim().toUpperCase(),
+        status: "pending-payment",
         createdAt: new Date().toISOString(),
       }
       completeOrder(order)
@@ -2691,346 +2655,63 @@ function CheckoutPage() {
                 <ChevronRight style={{ transform: "rotate(180deg)" }} /> Back to
                 delivery
               </button>
-              <h2>Payment method</h2>
-              <div className="pay-tabs">
-                {([
-                  { key: "mpesa-till", label: "Buy Goods (Till 1755994)", icon: QrCode },
-                  { key: "mpesa", label: "Direct M-Pesa Express", icon: Smartphone },
-                  { key: "card", label: "Card", icon: CreditCard },
-                  { key: "bank", label: "Bank transfer", icon: Banknote },
-                ] as {
-                  key: typeof payMethod
-                  label: string
-                  icon: React.ElementType
-                }[]).map(({ key, label, icon: Icon }) => (
+              <h2>Pay with M-Pesa Buy Goods</h2>
+              <p className="co-subhead">
+                Orders are released as soon as we confirm your payment on our
+                till — pay now with M-Pesa Buy Goods and enter the confirmation
+                code below.
+              </p>
+              <div className="mpesa-panel">
+                <div className="mpesa-till-box">
+                  <span className="eyebrow light">Lipa na M-Pesa</span>
+                  <h3 style={{ fontSize: 18, margin: "6px 0", color: "#ffffff" }}>BUY GOODS TILL NUMBER</h3>
+                  <div className="mpesa-till-number">1755994</div>
+                  <p style={{ margin: "4px 0 0", color: "#d1fae5", fontSize: 13 }}>
+                    Store Name: <strong>HENRY'S LIQUOR HUB</strong>
+                  </p>
+
+                  <div className="mpesa-steps">
+                    <strong>How to pay via M-Pesa Till:</strong>
+                    <ol>
+                      <li>Go to M-Pesa menu on your phone</li>
+                      <li>Select <strong>Lipa na M-Pesa</strong> &gt; <strong>Buy Goods and Services</strong></li>
+                      <li>Enter Till Number: <strong style={{ color: "#34d399" }}>1755994</strong></li>
+                      <li>Enter Amount: <strong>{formatPrice(total)}</strong></li>
+                      <li>Enter your M-Pesa PIN and confirm payment</li>
+                      <li>Enter your M-Pesa confirmation code (e.g. QJK892341X) below</li>
+                    </ol>
+                  </div>
+                </div>
+
+                <label className="co-label span-2" style={{ marginTop: 12 }}>
+                  M-Pesa Confirmation Ref Code
+                  <input
+                    required
+                    placeholder="e.g. QJK892341X"
+                    value={tillRef}
+                    onChange={(e) => setTillRef(e.target.value.toUpperCase())}
+                  />
+                </label>
+
+                <div className="co-actions">
+                  {checkoutError && <p className="form-error">{checkoutError}</p>}
                   <button
-                    key={key}
                     type="button"
-                    className={`pay-tab ${payMethod === key ? "active" : ""}`}
+                    className="button button-dark"
                     onClick={() => {
-                      setPayMethod(key)
-                      setMpesaState("idle")
+                      if (tillRef.trim().length < 4) {
+                        setCheckoutError(
+                          "Enter the M-Pesa confirmation code you received (at least 4 characters).",
+                        )
+                        return
+                      }
+                      setCheckoutError("")
+                      setStep(3)
                     }}
                   >
-                    <Icon /> {label}
+                    <CheckCircle /> Payment sent — review order <ArrowRight />
                   </button>
-                ))}
-              </div>
-
-              {payMethod === "mpesa-till" && (
-                <div className="mpesa-panel">
-                  <label className="cod-check">
-                    <input
-                      type="checkbox"
-                      checked={payOnDelivery}
-                      onChange={(e) => {
-                        setPayOnDelivery(e.target.checked)
-                        setMpesaState("idle")
-                      }}
-                    />
-                    <span>
-                      <strong>Pay on delivery</strong>
-                      <small>
-                        Skip the till payment now — pay the rider by M-Pesa or
-                        cash when your order arrives at your door.
-                      </small>
-                    </span>
-                  </label>
-                  {!payOnDelivery && (
-                    <>
-                  <div className="mpesa-till-box">
-                    <span className="eyebrow light">Lipa na M-Pesa</span>
-                    <h3 style={{ fontSize: 18, margin: "6px 0", color: "#ffffff" }}>BUY GOODS TILL NUMBER</h3>
-                    <div className="mpesa-till-number">1755994</div>
-                    <p style={{ margin: "4px 0 0", color: "#d1fae5", fontSize: 13 }}>
-                      Store Name: <strong>HENRY'S LIQUOR HUB</strong>
-                    </p>
-
-                    <div className="mpesa-steps">
-                      <strong>How to pay via M-Pesa Till:</strong>
-                      <ol>
-                        <li>Go to M-Pesa menu on your phone</li>
-                        <li>Select <strong>Lipa na M-Pesa</strong> &gt; <strong>Buy Goods and Services</strong></li>
-                        <li>Enter Till Number: <strong style={{ color: "#34d399" }}>1755994</strong></li>
-                        <li>Enter Amount: <strong>{formatPrice(total)}</strong></li>
-                        <li>Enter your M-Pesa PIN and confirm payment</li>
-                        <li>Enter your M-Pesa confirmation code (e.g. QJK892341X) below</li>
-                      </ol>
-                    </div>
-                  </div>
-
-                  <label className="co-label span-2" style={{ marginTop: 12 }}>
-                    M-Pesa Confirmation Ref Code
-                    <input
-                      required
-                      placeholder="e.g. QJK892341X"
-                      value={tillRef}
-                      onChange={(e) => setTillRef(e.target.value.toUpperCase())}
-                    />
-                  </label>
-
-                  <div style={{ marginTop: 16 }}>
-                    <button
-                      type="button"
-                      className="button button-dark"
-                      onClick={() => {
-                        if (!tillRef.trim() || tillRef.trim().length < 5) {
-                          setCheckoutError("Please enter your M-Pesa transaction code (e.g. QJK892341X).")
-                          return
-                        }
-                        setMpesaState("verified")
-                        setCheckoutError("")
-                      }}
-                    >
-                      <CheckCircle /> Confirm Buy Goods Payment (1755994)
-                    </button>
-                    {mpesaState === "verified" && (
-                      <div className="mpesa-status success" style={{ marginTop: 12 }}>
-                        <CheckCircle />
-                        <span>Payment verified with Ref: {tillRef || "1755994"}. Click below to review.</span>
-                      </div>
-                    )}
-                  </div>
-                    </>
-                  )}
-                  {payOnDelivery && (
-                    <div className="cod-panel">
-                      <CheckCircle />
-                      <div>
-                        <strong>
-                          Pay {formatPrice(total)} on delivery
-                        </strong>
-                        <p>
-                          Nothing to pay now. Our rider will call{" "}
-                          {form.phone} before leaving, and you settle the full
-                          amount by M-Pesa or cash at your door.
-                        </p>
-                      </div>
-                    </div>
-                  )}
                 </div>
-              )}
-
-              {payMethod === "mpesa" && (
-                <div className="mpesa-panel">
-                  <label className="co-label mpesa-phone-label">
-                    M-Pesa phone number
-                    <input
-                      placeholder="+254 7XX XXX XXX"
-                      value={form.phone}
-                      onChange={(e) =>
-                        setForm({ ...form, phone: e.target.value })
-                      }
-                    />
-                  </label>
-                  <label className="cod-check">
-                    <input
-                      type="checkbox"
-                      checked={payOnDelivery}
-                      onChange={(e) => {
-                        setPayOnDelivery(e.target.checked)
-                        setMpesaState("idle")
-                      }}
-                    />
-                    <span>
-                      <strong>Pay on delivery</strong>
-                      <small>
-                        The most popular option — pay the rider by M-Pesa or
-                        cash when your order arrives at your door.
-                      </small>
-                    </span>
-                  </label>
-                  {!payOnDelivery && (
-                    <div className="mpesa-body">
-                    <div className="mpesa-info">
-                      <p>
-                        Tap <strong>Request payment</strong> and you will
-                        receive an M-Pesa PIN prompt on your phone. Enter your
-                        PIN to complete the transaction.
-                      </p>
-                      <div className="mpesa-amount">
-                        <span>Amount to pay</span>
-                        <strong>{formatPrice(total)}</strong>
-                      </div>
-                      {mpesaState === "idle" && (
-                        <button
-                          type="button"
-                          className="button button-dark"
-                          onClick={requestMpesa}
-                        >
-                          <Smartphone /> Request M-Pesa payment
-                        </button>
-                      )}
-                      {mpesaState === "sending" && (
-                        <div className="mpesa-status sending">
-                          <div className="mpesa-spinner" />
-                          <span>Sending STK push to {form.phone}...</span>
-                        </div>
-                      )}
-                      {(mpesaState === "prompt" ||
-                        mpesaState === "verified") && (
-                        <div
-                          className={`mpesa-status ${
-                            mpesaState === "verified" ? "success" : "waiting"
-                          }`}
-                        >
-                          {mpesaState === "verified" ? (
-                            <>
-                              <CheckCircle />
-                              <span>Payment confirmed — proceed to review</span>
-                            </>
-                          ) : (
-                            <>
-                              <div className="mpesa-spinner" />
-                              <span>Waiting for PIN confirmation...</span>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="mpesa-phone-mockup" aria-hidden="true">
-                      <div className="phone-frame">
-                        <div className="phone-screen">
-                          <div className="phone-statusbar">
-                            <span>9:41</span>
-                            <span>●●●</span>
-                          </div>
-                          {mpesaState === "idle" && (
-                            <div className="phone-idle">
-                              <div className="phone-app-icon">M</div>
-                              <span>M-Pesa</span>
-                            </div>
-                          )}
-                          {mpesaState === "sending" && (
-                            <div className="phone-ringing">
-                              <div className="phone-ring-anim" />
-                              <div className="phone-app-icon">M</div>
-                              <span>Incoming request...</span>
-                            </div>
-                          )}
-                          {mpesaState === "prompt" && (
-                            <div className="phone-prompt">
-                              <div className="mpesa-logo-small">M-PESA</div>
-                              <p className="phone-merchant">
-                                Henry's Liquor Hub
-                              </p>
-                              <p className="phone-amount">
-                                {formatPrice(total)}
-                              </p>
-                              <div className="phone-pin-label">
-                                Enter M-Pesa PIN
-                              </div>
-                              <div className="phone-pin-dots">
-                                {[0, 1, 2, 3].map((i) => (
-                                  <span
-                                    key={i}
-                                    className="pin-dot"
-                                    style={{ animationDelay: `${i * 0.3}s` }}
-                                  />
-                                ))}
-                              </div>
-                              <div className="phone-btns">
-                                <button type="button">Cancel</button>
-                                <button type="button">OK</button>
-                              </div>
-                            </div>
-                          )}
-                          {mpesaState === "verified" && (
-                            <div className="phone-success">
-                              <CheckCircle />
-                              <strong>Confirmed</strong>
-                              <span>{formatPrice(total)} paid</span>
-                              <p>
-                                Ref: QR
-                                {Math.floor(Math.random() * 9000000) + 1000000}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                        <div className="phone-home-bar" />
-                      </div>
-                    </div>
-                  </div>
-                  )}
-                  {payOnDelivery && (
-                    <div className="cod-panel">
-                      <CheckCircle />
-                      <div>
-                        <strong>
-                          Pay {formatPrice(total)} on delivery
-                        </strong>
-                        <p>
-                          Your rider will call {form.phone || "your phone"} on
-                          the way. Pay by M-Pesa or cash at handover — no
-                          online payment needed now.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {payMethod === "card" && (
-                <div className="card-panel co-fields">
-                  <label className="co-label span-2">
-                    Cardholder name
-                    <input placeholder="Name on card" />
-                  </label>
-                  <label className="co-label span-2">
-                    Card number
-                    <input placeholder="•••• •••• •••• ••••" maxLength={19} />
-                  </label>
-                  <label className="co-label">
-                    Expiry
-                    <input placeholder="MM / YY" />
-                  </label>
-                  <label className="co-label">
-                    CVV
-                    <input placeholder="•••" maxLength={4} />
-                  </label>
-                  <div className="co-secure span-2">
-                    <ShieldCheck /> Your card details are encrypted and never
-                    stored.
-                  </div>
-                </div>
-              )}
-
-              {payMethod === "bank" && (
-                <div className="bank-panel">
-                  <p>
-                    Transfer the exact amount to the account below. Include your
-                    order number as the reference. Orders are processed within 1
-                    business hour of payment confirmation.
-                  </p>
-                  <div className="bank-details">
-                    {[
-                      ["Bank", "Equity Bank Kenya"],
-                      ["Account name", "Henry's Liquor Hub Ltd"],
-                      ["Account number", "0140265801893"],
-                      ["Branch code", "026"],
-                      ["Amount", formatPrice(total)],
-                    ].map(([k, v]) => (
-                      <div key={k}>
-                        <span>{k}</span>
-                        <strong>{v}</strong>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="co-actions">
-                <button
-                  type="button"
-                  className="button button-dark"
-                  disabled={
-                    payMethod === "mpesa" && !payOnDelivery && mpesaState !== "verified"
-                  }
-                  onClick={() => setStep(3)}
-                >
-                  Review order <ArrowRight />
-                </button>
               </div>
             </div>
           )}
@@ -3071,16 +2752,12 @@ function CheckoutPage() {
                     </button>
                   </div>
                   <p>
-                    {payOnDelivery &&
-                    (payMethod === "mpesa" || payMethod === "mpesa-till")
-                      ? "Pay on delivery — M-Pesa or cash at the door"
-                      : payMethod === "mpesa"
-                        ? `M-Pesa · ${form.phone}`
-                        : payMethod === "mpesa-till"
-                          ? "M-Pesa Buy Goods (Till 1755994)"
-                          : payMethod === "card"
-                            ? "Visa / Mastercard"
-                            : "Bank transfer"}
+                    M-Pesa Buy Goods · Till 1755994 · Ref {tillRef}
+                    <br />
+                    <small>
+                      Our team confirms the payment on the till, then releases
+                      your order for delivery.
+                    </small>
                   </p>
                 </div>
               </div>
@@ -3108,8 +2785,8 @@ function CheckoutPage() {
                 >
                   <ShieldCheck />{" "}
                   {isSubmitting
-                    ? "Placing order..."
-                    : `Place order — ${formatPrice(total)}`}
+                    ? "Submitting order..."
+                    : `Submit order — ${formatPrice(total)}`}
                 </button>
                 <p className="co-legal">
                   By placing this order you confirm you are 18+ and agree to our
@@ -3192,7 +2869,10 @@ function OrderConfirmationPage() {
           You are all set{customer ? `, ${customer.name.split(" ")[0]}` : ""}.
         </h1>
         <p className="confirm-sub">
-          Order <strong>{id}</strong> has been confirmed and is being prepared.
+          Order <strong>{id}</strong> has been received with your M-Pesa
+          confirmation code. We are verifying the payment on our till now —
+          the order is released for delivery the moment it is confirmed, and
+          you will get an alert either way.
         </p>
 
         <div className="confirm-meta">
@@ -8133,6 +7813,8 @@ type AdminOrderRecord = {
   order_number: string
   status: string
   payment_method: string
+  payment_status: string
+  payment_reference: string | null
   delivery_address: Record<string, unknown> | null
   delivery_fee_kes: number
   total_kes: number
@@ -8152,7 +7834,7 @@ type AdminOrderItem = {
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
-  mpesa: "M-Pesa",
+  mpesa: "M-Pesa Buy Goods",
   card: "Card",
   bank: "Bank transfer",
   cash: "Pay on delivery",
@@ -8163,6 +7845,7 @@ type AdminOrderDetail = {
   status: string
   payment_method: string
   payment_status: string
+  payment_reference: string | null
   delivery_type: string
   subtotal_kes: number
   discount_kes: number
@@ -8195,8 +7878,10 @@ function AdminOrders() {
   const [detailError, setDetailError] = useState("")
   const [delivering, setDelivering] = useState(false)
   const [deliverNotice, setDeliverNotice] = useState("")
+  const [confirmingPayment, setConfirmingPayment] = useState(false)
   const statusFilters = [
     "All",
+    "pending-payment",
     "confirmed",
     "preparing",
     "out-for-delivery",
@@ -8205,6 +7890,7 @@ function AdminOrders() {
   const filtered =
     filter === "All" ? orders : orders.filter((o) => o.status === filter)
   const statusLabel: Record<string, string> = {
+    "pending-payment": "Awaiting payment",
     confirmed: "Confirmed",
     preparing: "Preparing",
     "out-for-delivery": "Out for delivery",
@@ -8234,9 +7920,10 @@ function AdminOrders() {
           rows.map((row) => {
             const address = row.delivery_address ?? {}
             let status: Order["status"] = "confirmed"
-            if (row.status === "preparing") status = "preparing"
-            if (row.status === "out_for_delivery") status = "out-for-delivery"
-            if (row.status === "delivered") status = "delivered"
+            if (row.status === "pending_payment") status = "pending-payment"
+            else if (row.status === "preparing") status = "preparing"
+            else if (row.status === "out_for_delivery") status = "out-for-delivery"
+            else if (row.status === "delivered") status = "delivered"
             return {
               id: row.order_number,
               adminId: row.id,
@@ -8258,6 +7945,7 @@ function AdminOrders() {
                   typeof address.area === "string" ? address.area : "Pickup",
               },
               payment: row.payment_method,
+              paymentReference: row.payment_reference ?? undefined,
               status,
               createdAt: row.placed_at,
             }
@@ -8316,6 +8004,57 @@ function AdminOrders() {
       cancelled = true
     }
   }, [selected?.adminId])
+
+  async function confirmPayment() {
+    const session = getSessionToken()
+    if (!session || !selected?.adminId) {
+      setError("Sign in with a staff account to confirm payments.")
+      return
+    }
+    setConfirmingPayment(true)
+    setError("")
+    try {
+      const response = await fetch(`/api/admin/orders/${selected.adminId}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${session}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: "payment_confirmed" }),
+      })
+      const data = (await response.json().catch(() => null)) as {
+        error?: string
+      } | null
+      if (!response.ok)
+        throw new Error(data?.error ?? "We could not confirm this payment.")
+      setDetailOrder((current) =>
+        current
+          ? { ...current, status: "payment_confirmed", payment_status: "successful" }
+          : current,
+      )
+      setOrders((current) =>
+        current.map((order) =>
+          order.id === selected.id
+            ? { ...order, status: "confirmed" as const }
+            : order,
+        ),
+      )
+      setSelected((current) =>
+        current?.id === selected.id
+          ? { ...current, status: "confirmed" as const }
+          : current,
+      )
+      setDeliverNotice("Payment confirmed — the order is released for dispatch.")
+    } catch (confirmError) {
+      setError(
+        confirmError instanceof Error
+          ? confirmError.message
+          : "We could not confirm this payment.",
+      )
+    } finally {
+      setConfirmingPayment(false)
+    }
+  }
 
   function toggleItem(itemId: string, on: boolean) {
     setDetailItems((current) =>
@@ -8578,6 +8317,41 @@ function AdminOrders() {
                   </span>
                 </div>
               </div>
+              {detailOrder?.payment_reference && (
+                <div className="drawer-section">
+                  <h3>Payment</h3>
+                  <div className="pay-verify-box">
+                    <div className="pay-verify-ref">
+                      <strong>Buy Goods Till 1755994</strong> · Ref{" "}
+                      <strong>{detailOrder.payment_reference}</strong> ·{" "}
+                      {formatPrice(detailOrder.total_kes)}
+                    </div>
+                    {detailOrder.payment_status === "successful" ? (
+                      <p className="drawer-muted">
+                        Payment confirmed. The order is released — you can
+                        dispatch it below.
+                      </p>
+                    ) : (
+                      <>
+                        <p className="pay-verify-note">
+                          Check your till statement or M-Pesa app that this
+                          reference matches a real payment before releasing.
+                        </p>
+                        <button
+                          type="button"
+                          className="button button-dark button-wide"
+                          disabled={confirmingPayment}
+                          onClick={confirmPayment}
+                        >
+                          {confirmingPayment
+                            ? "Confirming…"
+                            : "Confirm payment & release order"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="drawer-section">
                 <h3>Ordered products</h3>
                 {detailError && <p className="form-error">{detailError}</p>}

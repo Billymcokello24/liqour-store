@@ -30,12 +30,17 @@ export async function POST(
         order_number: string;
         customer_id: string | null;
         total_kes: number;
+        payment_reference: string | null;
+        payment_status: string;
       }>(
-        `SELECT id, order_number, customer_id, total_kes FROM orders WHERE id = $1 FOR UPDATE`,
+        `SELECT id, order_number, customer_id, total_kes, payment_reference, payment_status FROM orders WHERE id = $1 FOR UPDATE`,
         [orderId],
       );
       const header = found.rows[0];
       if (!header) throw new Response("Order not found.", { status: 404 });
+      if (header.payment_reference && header.payment_status !== "successful") {
+        throw new Response("Confirm the M-Pesa payment before dispatching this order.", { status: 422 });
+      }
 
       const itemRows = await client.query<{
         id: string;

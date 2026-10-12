@@ -41,7 +41,8 @@ export type Order = {
     area: string
   }
   payment: string
-  status: "confirmed" | "preparing" | "out-for-delivery" | "delivered"
+  paymentReference?: string
+  status: "pending-payment" | "confirmed" | "preparing" | "out-for-delivery" | "delivered"
   createdAt: string
 }
 

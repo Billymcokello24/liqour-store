@@ -15,6 +15,7 @@ const CLAIM_COOLDOWN = "interval '30 seconds'";
 
 const TITLES: Record<string, string> = {
   "order-created": "Order placed",
+  "order-payment-confirmed": "Payment confirmed",
   "order-confirmed": "Order confirmed",
   "order-preparing": "Order being prepared",
   "order-out_for_delivery": "Out for delivery",
