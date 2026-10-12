@@ -87,13 +87,13 @@ export async function PATCH(
       `UPDATE orders
        SET status = $1, updated_at = now(),
            payment_status = CASE
-             WHEN $1 = 'payment_confirmed' THEN 'successful'
-             WHEN $1 = 'delivered' AND payment_method = 'cash' THEN 'successful'
+             WHEN $3::text = 'payment_confirmed' THEN 'successful'
+             WHEN $3::text = 'delivered' AND payment_method = 'cash' THEN 'successful'
              ELSE payment_status
            END
        WHERE id = $2
        RETURNING id, status, customer_id, order_number, total_kes`,
-      [input.status, orderId],
+      [input.status, orderId, input.status],
     );
     if (!result.rows[0]) {
       return NextResponse.json({ error: "Order not found." }, { status: 404 });
